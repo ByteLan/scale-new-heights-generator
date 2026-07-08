@@ -61,8 +61,9 @@ function fontSpec(flavor: StickerFlavor, fontSize: number): string {
 // 导出时文字（内容）本身归一化到的目标高度。注意这里参照的是「文字/内容」的高度
 // （不含描边），而非含描边的画布总高度。这样描边加粗时，裁剪后的画布随之外扩变大、
 // 文字尺寸保持稳定，导出图片（以及预览的棋盘格背景）会真实反映描边厚度的变化。
-const EXPORT_TEXT_HEIGHT = 150
-const MAX_EXPORT_EDGE = 2048
+// 这里把目标高度调大一档，让服务端开放 API 返回的 PNG 更清晰。
+const EXPORT_TEXT_HEIGHT = 220
+const MAX_EXPORT_EDGE = 3072
 const ENVELOPE_ANTIALIAS = 1.1
 const OUTLINE_ANTIALIAS = 0.9
 const ALPHA_THRESHOLD = 16
@@ -144,6 +145,10 @@ export interface RenderResult {
   height: number
   toBlob: () => Promise<Blob>
   toBitmap: () => ImageBitmap
+}
+
+export interface RenderStickerOptions {
+  exportScale?: number
 }
 
 const fontLoadPromises = new Map<StickerFlavor, Promise<void>>()
@@ -474,11 +479,13 @@ export async function ensureStickerFontLoaded(
 export async function renderSticker(
   controls: StickerControls,
   iconBitmap: ImageBitmap | null = null,
+  options: RenderStickerOptions = {},
 ): Promise<RenderResult> {
   const trimmedText = controls.text.trim()
   if (trimmedText.length === 0) {
     throw new Error('Text is required for sticker export.')
   }
+  const exportScaleMultiplier = normalizeExportScale(options.exportScale)
 
   await ensureStickerFontLoaded(controls.flavor)
 
@@ -660,11 +667,11 @@ export async function renderSticker(
   // 以「文字内容高度」（不含描边）为稳定参照来缩放：描边越厚，裁剪画布相对内容越大，
   // 缩放后整体尺寸随之增大，从而在导出与预览棋盘格上真实反映描边厚度。
   const contentHeight = Math.max(1, contentBounds.maxY - contentBounds.minY)
-  const exportScale = EXPORT_TEXT_HEIGHT / contentHeight
+  const exportScale = (EXPORT_TEXT_HEIGHT * exportScaleMultiplier) / contentHeight
   const resizedCanvas = resizeCanvasByScale(
     croppedCanvas,
     exportScale,
-    MAX_EXPORT_EDGE,
+    Math.round(MAX_EXPORT_EDGE * exportScaleMultiplier),
   )
   const exportCanvas = padCanvas(
     resizedCanvas,
@@ -693,6 +700,13 @@ function calculateWorkingPadding(controls: StickerControls): number {
         Math.abs(controls.shadow.offsetY),
       ),
   )
+}
+
+function normalizeExportScale(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
+    return 1
+  }
+  return Math.min(3, Math.max(1, value))
 }
 
 function resetAndPrepareTextContext(

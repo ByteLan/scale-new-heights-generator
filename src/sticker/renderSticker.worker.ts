@@ -2,10 +2,10 @@ import { renderSticker } from './renderSticker'
 import type { WorkerRequest, WorkerResponse } from './workerProtocol'
 
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  const { type, id, controls, iconBitmap } = e.data
+  const { type, id, controls, iconBitmap, exportScale } = e.data
 
   try {
-    const result = await renderSticker(controls, iconBitmap)
+    const result = await renderSticker(controls, iconBitmap, { exportScale })
 
     if (type === 'render') {
       const bitmap = result.toBitmap()

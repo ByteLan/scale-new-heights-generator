@@ -1,6 +1,6 @@
 import type { StickerControls } from './defaults'
 import { loadIconBitmap } from './iconLoader'
-import type { WorkerResponse } from './workerProtocol'
+import type { WorkerRenderOptions, WorkerResponse } from './workerProtocol'
 
 export interface PreviewResult {
   bitmap: ImageBitmap
@@ -41,28 +41,34 @@ function getWorker(): Worker {
   return worker
 }
 
-export function renderStickerPreview(controls: StickerControls): Promise<PreviewResult> {
+export function renderStickerPreview(
+  controls: StickerControls,
+  options: WorkerRenderOptions = {},
+): Promise<PreviewResult> {
   const id = nextId++
   const w = getWorker()
   return new Promise<PreviewResult>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: never) => void, reject })
     void loadIconBitmap(controls.icon).then((iconBitmap) => {
       w.postMessage(
-        { type: 'render', id, controls, iconBitmap },
+        { type: 'render', id, controls, iconBitmap, exportScale: options.exportScale },
         { transfer: iconBitmap ? [iconBitmap] : [] },
       )
     })
   })
 }
 
-export function exportStickerBlob(controls: StickerControls): Promise<Blob> {
+export function exportStickerBlob(
+  controls: StickerControls,
+  options: WorkerRenderOptions = {},
+): Promise<Blob> {
   const id = nextId++
   const w = getWorker()
   return new Promise<Blob>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: never) => void, reject })
     void loadIconBitmap(controls.icon).then((iconBitmap) => {
       w.postMessage(
-        { type: 'export', id, controls, iconBitmap },
+        { type: 'export', id, controls, iconBitmap, exportScale: options.exportScale },
         { transfer: iconBitmap ? [iconBitmap] : [] },
       )
     })

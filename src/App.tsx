@@ -54,8 +54,23 @@ const STYLE_OPTIONS: {
   },
 ]
 
-function buildShareUrl(controls: StickerControls): string {
+const DEFAULT_EXPORT_SCALE = 1
+
+function normalizeExportScale(value: unknown): number {
+  const numeric = typeof value === 'string' || typeof value === 'number'
+    ? Number(value)
+    : Number.NaN
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_EXPORT_SCALE
+  }
+  return Math.min(3, Math.max(1, numeric))
+}
+
+function buildShareUrl(controls: StickerControls, exportScale = DEFAULT_EXPORT_SCALE): string {
   const params = new URLSearchParams(controlsToSearch(controls))
+  if (exportScale !== DEFAULT_EXPORT_SCALE) {
+    params.set('scale', String(exportScale))
+  }
   const query = params.toString()
   return `${location.origin}${location.pathname}${query ? `?${query}` : ''}`
 }
@@ -63,6 +78,7 @@ function buildShareUrl(controls: StickerControls): string {
 function App() {
   const search = useSearch({ from: '__root__' })
   const navigate = useNavigate()
+  const exportScale = normalizeExportScale(search.scale)
 
   const [controls, setControls] = useState<StickerControls>(() =>
     searchToControls(search),
@@ -83,8 +99,18 @@ function App() {
 
   // 同步控件 → URL query（用 replace，避免刷屏历史记录）。
   useEffect(() => {
-    void navigate({ to: '.', search: () => controlsToSearch(renderControls), replace: true })
-  }, [renderControls, navigate])
+    void navigate({
+      to: '.',
+      search: () => {
+        const nextSearch = controlsToSearch(renderControls)
+        if (exportScale !== DEFAULT_EXPORT_SCALE) {
+          nextSearch.scale = String(exportScale)
+        }
+        return nextSearch
+      },
+      replace: true,
+    })
+  }, [renderControls, navigate, exportScale])
 
   const hasText = controls.text.trim().length > 0
 
@@ -103,7 +129,7 @@ function App() {
     setPreviewError(null)
     setIsRendering(true)
 
-    void renderStickerPreview(renderControls)
+    void renderStickerPreview(renderControls, { exportScale })
       .then((result) => {
         if (active) {
           setPreview((prev) => {
@@ -130,7 +156,7 @@ function App() {
       active = false
       cancelPendingPreviews()
     }
-  }, [renderControls])
+  }, [renderControls, exportScale])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -150,6 +176,32 @@ function App() {
       ctx.drawImage(preview.bitmap, 0, 0)
     }
   }, [preview])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (!hasText) {
+      root.dataset.stickerRenderState = 'empty'
+      delete root.dataset.stickerRenderError
+      return
+    }
+    if (isRendering) {
+      root.dataset.stickerRenderState = 'rendering'
+      delete root.dataset.stickerRenderError
+      return
+    }
+    if (previewError) {
+      root.dataset.stickerRenderState = 'error'
+      root.dataset.stickerRenderError = previewError
+      return
+    }
+    if (preview) {
+      root.dataset.stickerRenderState = 'ready'
+      delete root.dataset.stickerRenderError
+      return
+    }
+    root.dataset.stickerRenderState = 'idle'
+    delete root.dataset.stickerRenderError
+  }, [hasText, isRendering, previewError, preview])
 
   const updateControl = <K extends keyof StickerControls>(key: K, value: StickerControls[K]) => {
     setControls((c) => ({ ...c, [key]: value }))
@@ -221,7 +273,7 @@ function App() {
     if (!hasText) return
     setIsExporting(true)
     try {
-      const blob = await exportStickerBlob(controls)
+      const blob = await exportStickerBlob(controls, { exportScale })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -245,7 +297,7 @@ function App() {
   const handleCopyImage = async () => {
     if (!hasText) return
     try {
-      const blob = await exportStickerBlob(controls)
+      const blob = await exportStickerBlob(controls, { exportScale })
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob }),
       ])
@@ -258,7 +310,7 @@ function App() {
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(buildShareUrl(controls))
+      await navigator.clipboard.writeText(buildShareUrl(controls, exportScale))
       flashCopied('link')
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '复制链接失败。'
@@ -517,7 +569,7 @@ function App() {
               {IN_IFRAME ? (
                 <a
                   className="export-btn"
-                  href={buildShareUrl(controls)}
+                  href={buildShareUrl(controls, exportScale)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
