@@ -3,13 +3,16 @@ import type {
   AvatarWorkerRequest,
   AvatarWorkerResponse,
 } from '../config/workerProtocol'
-import { postImageWorkerResult } from '../../shared/worker/imageWorker'
+import { createLatestRenderCache } from '../../shared/worker/imageWorker'
+import { postImageWorkerResult } from '../../shared/worker/imageWorkerResult'
+
+const cachedRender = createLatestRenderCache<Awaited<ReturnType<typeof renderAvatar>>>()
 
 self.onmessage = async (e: MessageEvent<AvatarWorkerRequest>) => {
   const { type, id, controls } = e.data
 
   try {
-    const result = await renderAvatar(controls)
+    const result = await cachedRender(JSON.stringify(controls), () => renderAvatar(controls))
     await postImageWorkerResult(
       id,
       type,
