@@ -50,6 +50,12 @@ export const STICKER_DEFAULT_OUTLINE_WIDTH = {
 /** 贴纸渲染风味列表 */
 export const STICKER_FLAVORS = Object.keys(STICKER_DEFAULT_OUTLINE_WIDTH) as StickerFlavor[]
 
+/** 字节范图标与文字共用渐变；勇攀高峰分别显示完整渐变 */
+export const STICKER_DEFAULT_MERGE_GRADIENT: Record<StickerFlavor, boolean> = {
+  snh: false,
+  bs: true,
+}
+
 // 渲染倍率的单一真源：默认值与合法区间都只在这里定义，
 // 渲染层（sticker.ts）与 Node 入口（node.ts）一律 import，禁止各自重写。
 export {
@@ -80,6 +86,8 @@ export interface StickerControls {
   tilt: boolean
   /** 图标倾斜：开启时前缀图标跟随字面旋转/斜切 */
   iconTilt: boolean
+  /** 合并图标与文字的渐变区域；默认值随风味变化 */
+  mergeGradient: boolean
   /** 内部超采样倍率，用于平滑斜线和斜切边缘 */
   antialiasScale: number
   /** 开启后导出 Ultra HDR JPEG gain map；普通路径仍导出 PNG */
@@ -104,6 +112,7 @@ export const DEFAULT_STICKER_CONTROLS: StickerControls = {
   peak: true,
   tilt: true,
   iconTilt: true,
+  mergeGradient: STICKER_DEFAULT_MERGE_GRADIENT.snh,
   antialiasScale: DEFAULT_ANTIALIAS_SCALE,
   flash: false,
   flashStops: DEFAULT_FLASH_STOPS,
@@ -185,6 +194,10 @@ export function normalizeStickerControls(value: unknown): StickerControls {
       typeof input.iconTilt === 'boolean'
         ? input.iconTilt
         : DEFAULT_STICKER_CONTROLS.iconTilt,
+    mergeGradient:
+      typeof input.mergeGradient === 'boolean'
+        ? input.mergeGradient
+        : STICKER_DEFAULT_MERGE_GRADIENT[flavor],
     antialiasScale: clampNumber(
       input.antialiasScale,
       ANTIALIAS_SCALE_MIN,

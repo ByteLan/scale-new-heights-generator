@@ -1,4 +1,5 @@
-import { deriveDepthColor, randomGradientPair, randomVividColors } from '../utils/color'
+import { deriveDepthColor } from '../utils/color'
+import { randomStickerColors } from '../utils/randomPalette'
 import { useToolEditor } from '../../shared/hooks/useToolEditor'
 import {
   cancelPendingPreviews,
@@ -10,6 +11,7 @@ import {
   type StickerControls,
   type StickerEnvelopeControls,
   STICKER_DEFAULT_OUTLINE_WIDTH,
+  STICKER_DEFAULT_MERGE_GRADIENT,
   type StickerFlavor,
   type StickerPaddingControls,
 } from '../config/defaults'
@@ -44,6 +46,7 @@ export function useStickerEditor() {
     setControls((c) => ({
       ...c,
       flavor,
+      mergeGradient: STICKER_DEFAULT_MERGE_GRADIENT[flavor],
       envelope: {
         ...c.envelope,
         outlineStrokeWidth: STICKER_DEFAULT_OUTLINE_WIDTH[flavor],
@@ -61,18 +64,11 @@ export function useStickerEditor() {
   const randomizeColors = () => {
     setControls((c) => ({
       ...c,
-      envelope:
-        c.flavor === 'bs'
-          ? {
-              ...c.envelope,
-              colors: randomGradientPair(c.envelope.colors[0] ?? '#76baf4'),
-              gradientAngle: defaultGradientAngle(c.icon),
-            }
-          : {
-              ...c.envelope,
-              colors: randomVividColors(c.envelope.colors[0] ?? '#76baf4'),
-              gradientAngle: defaultGradientAngle(c.icon),
-            },
+      envelope: {
+        ...c.envelope,
+        colors: randomStickerColors(c.envelope.colors[0] ?? '#76baf4', { flavor: c.flavor }),
+        gradientAngle: defaultGradientAngle(c.icon),
+      },
     }))
   }
 
@@ -111,6 +107,7 @@ export function useStickerEditor() {
       flavor: preset.flavor,
       icon: preset.icon,
       iconTilt: preset.iconTilt,
+      mergeGradient: STICKER_DEFAULT_MERGE_GRADIENT[preset.flavor],
       shadow: { ...c.shadow, opacity: preset.shadowOpacity },
       envelope: {
         ...c.envelope,

@@ -7,6 +7,7 @@ import { Select } from '../../../shared/ui/select'
 import {
   defaultGradientAngle,
   STICKER_FLAVORS,
+  STICKER_DEFAULT_MERGE_GRADIENT,
 } from '../../config/defaults'
 import {
   STICKER_PRESET_GROUPS,
@@ -63,6 +64,7 @@ export function StickerPresetToolbar({
     (controls.flavor !== activePreset.flavor ||
       controls.icon !== activePreset.icon ||
       controls.iconTilt !== activePreset.iconTilt ||
+      controls.mergeGradient !== STICKER_DEFAULT_MERGE_GRADIENT[activePreset.flavor] ||
       controls.envelope.gradientAngle !== activePreset.gradientAngle ||
       controls.envelope.outlineStrokeWidth !== activePreset.outlineStrokeWidth ||
       controls.envelope.colors.join(',') !== activePreset.colors.join(','))

@@ -35,15 +35,6 @@ export function StickerControlsPanel({
 
   return (
     <section className="panel panel-controls">
-      <Textarea
-        ref={textareaRef}
-        className="text-input"
-        value={controls.text}
-        placeholder="输入文本，回车换行"
-        rows={2}
-        onChange={(e) => updateControl('text', e.target.value)}
-      />
-
       <StickerPresetToolbar
         controls={controls}
         updateEnvelope={updateEnvelope}
@@ -52,6 +43,15 @@ export function StickerControlsPanel({
         addColor={addColor}
         removeColor={removeColor}
         applyPresetText={applyPresetText}
+      />
+
+      <Textarea
+        ref={textareaRef}
+        className="text-input"
+        value={controls.text}
+        placeholder="输入文本，回车换行"
+        rows={2}
+        onChange={(e) => updateControl('text', e.target.value)}
       />
 
       <StickerStyleField

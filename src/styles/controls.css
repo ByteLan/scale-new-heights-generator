@@ -83,6 +83,10 @@
   position: relative;
 }
 
+.preset-select {
+  min-block-size: 2.5rem;
+}
+
 .preset-reset {
   position: absolute;
   inset-block-start: 50%;

@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import {
   StickerGenerator,
   createNapiCanvasRuntime,
   renderStickerToBuffer,
   renderStickerToPngBytes,
+  registerStickerFonts,
 } from './node'
+import { normalizeStickerControls, type StickerFlavor } from './config/defaults'
+import { renderSticker } from './render/sticker'
+import type { RenderIcon, RenderResult } from './render/types'
 
 function pngSize(buffer: Buffer | Uint8Array) {
   const view = new DataView(
@@ -92,4 +96,84 @@ it('renders 300 characters on multiple lines without allocating giant canvases',
   expect(pngSize(output).height).toBeLessThan(600)
   expect(output.byteLength).toBeGreaterThan(1024)
   expect(Math.max(...sizes.map(([width, height]) => width * height))).toBeLessThan(12_000_000)
+})
+
+let icon: RenderIcon
+
+function render(text: string, flavor: StickerFlavor, mergeGradient: boolean, withIcon = true, angle = 90) {
+  return renderSticker(normalizeStickerControls({
+    text,
+    flavor,
+    mergeGradient,
+    peak: false,
+    tilt: false,
+    iconTilt: false,
+    antialiasScale: 1,
+    envelope: { colors: ['#e85621', '#3587ee'], gradientAngle: angle, outlineStrokeWidth: 8 },
+    shadow: { opacity: 0 },
+  }), withIcon ? icon : null, { outputScale: 3 })
+}
+
+function pixels(result: RenderResult) {
+  return result.canvas.getContext('2d')!.getImageData(0, 0, result.width, result.height).data
+}
+
+// 透明竖列分隔图标与文字，统计第一个连通区域中的不透明彩色像素。
+function iconMean(result: RenderResult) {
+  const data = pixels(result)
+  const sum = [0, 0, 0]
+  let started = false
+  let count = 0
+  for (let x = 0; x < result.width; x++) {
+    let occupied = false
+    for (let y = 0; y < result.height; y++) {
+      const offset = (y * result.width + x) * 4
+      occupied ||= data[offset + 3] > 0
+      if (data[offset + 3] < 250 || Math.min(...data.slice(offset, offset + 3)) > 240) continue
+      for (let channel = 0; channel < 3; channel++) sum[channel] += data[offset + channel]
+      count++
+    }
+    if (started && !occupied) break
+    started ||= occupied
+  }
+  expect(count).toBeGreaterThan(50)
+  return sum.map(value => value / count)
+}
+
+describe('图标渐变区域', () => {
+  beforeAll(async () => {
+    const runtime = await createNapiCanvasRuntime()
+    new StickerGenerator(runtime)
+    await registerStickerFonts({}, runtime)
+    const canvas = runtime.createCanvas(32, 32)
+    canvas.getContext('2d')!.fillRect(0, 0, 32, 32)
+    icon = { bitmap: canvas as unknown as ImageBitmap, colored: false }
+  })
+  for (const flavor of ['snh', 'bs'] as const) {
+    it(`${flavor} 独立渐变的图标配色不随文字长度变化`, async () => {
+      for (const angle of [45, 90]) {
+        const short = iconMean(await render('高', flavor, false, true, angle))
+        const long = iconMean(await render('高高高高高', flavor, false, true, angle))
+        expect(Math.max(...short.map((value, channel) => Math.abs(value - long[channel])))).toBeLessThan(3)
+      }
+    })
+
+    it(`${flavor} 合并渐变的图标随整段文字取色`, async () => {
+      const short = iconMean(await render('高', flavor, true))
+      const long = iconMean(await render('高高高高高', flavor, true))
+      expect(Math.max(...short.map((value, channel) => Math.abs(value - long[channel])))).toBeGreaterThan(10)
+    })
+
+    it(`${flavor} 切换区域不会改变轮廓、透明度或无图标的图片`, async () => {
+      const independent = await render('高峰', flavor, false)
+      const merged = await render('高峰', flavor, true)
+      expect([independent.width, independent.height]).toEqual([merged.width, merged.height])
+      expect(pixels(independent).filter((_, index) => index % 4 === 3)).toEqual(
+        pixels(merged).filter((_, index) => index % 4 === 3),
+      )
+      expect(pixels(await render('高峰', flavor, false, false))).toEqual(
+        pixels(await render('高峰', flavor, true, false)),
+      )
+    })
+  }
 })

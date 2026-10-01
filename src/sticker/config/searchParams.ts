@@ -9,6 +9,7 @@ import {
   DEFAULT_STICKER_CONTROLS,
   normalizeStickerControls,
   STICKER_DEFAULT_OUTLINE_WIDTH,
+  STICKER_DEFAULT_MERGE_GRADIENT,
   type StickerControls,
 } from './defaults'
 
@@ -39,6 +40,7 @@ export function controlsToSearch(controls: StickerControls): StickerSearch {
   put('pk', controls.peak, defaults.peak)
   put('tl', controls.tilt, defaults.tilt)
   put('it', controls.iconTilt, defaults.iconTilt)
+  put('mg', controls.mergeGradient, STICKER_DEFAULT_MERGE_GRADIENT[controls.flavor])
   put('aa', controls.antialiasScale, defaults.antialiasScale)
   if (controls.flash && controls.flashStops > 0) search.fx = formatSearchNumber(controls.flashStops)
 
@@ -76,6 +78,7 @@ export function searchToControls(search: StickerSearch): StickerControls {
     peak: boolean('pk'),
     tilt: boolean('tl'),
     iconTilt: boolean('it'),
+    mergeGradient: boolean('mg'),
     antialiasScale: number('aa'),
     flash: flashStops !== undefined && flashStops > 0,
     flashStops,

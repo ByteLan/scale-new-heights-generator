@@ -7,9 +7,11 @@ import { SliderField } from '../../../shared/components/SliderField'
 import {
   DEFAULT_STICKER_CONTROLS,
   STICKER_DEFAULT_OUTLINE_WIDTH,
+  STICKER_DEFAULT_MERGE_GRADIENT,
 } from '../../config/defaults'
 
-type StickerAdvancedControlsProps = Pick<StickerEditor,
+type StickerAdvancedControlsProps = Pick<
+  StickerEditor,
   'controls' | 'updateControl' | 'updateEnvelope' | 'updatePadding'
 >
 
@@ -20,8 +22,10 @@ export function StickerAdvancedControls({
   updatePadding,
 }: StickerAdvancedControlsProps) {
   const defaultOutlineWidth = STICKER_DEFAULT_OUTLINE_WIDTH[controls.flavor]
+  const defaultMergeGradient = STICKER_DEFAULT_MERGE_GRADIENT[controls.flavor]
   const defaults = DEFAULT_STICKER_CONTROLS
   const hasAdvancedParams =
+    controls.mergeGradient !== defaultMergeGradient ||
     controls.iconTilt !== defaults.iconTilt ||
     controls.tilt !== defaults.tilt ||
     controls.peak !== defaults.peak ||
@@ -40,12 +44,14 @@ export function StickerAdvancedControls({
           isDirty={
             controls.iconTilt !== DEFAULT_STICKER_CONTROLS.iconTilt ||
             controls.tilt !== DEFAULT_STICKER_CONTROLS.tilt ||
-            controls.peak !== DEFAULT_STICKER_CONTROLS.peak
+            controls.peak !== DEFAULT_STICKER_CONTROLS.peak ||
+            controls.mergeGradient !== defaultMergeGradient
           }
           onReset={() => {
             updateControl('iconTilt', DEFAULT_STICKER_CONTROLS.iconTilt)
             updateControl('tilt', DEFAULT_STICKER_CONTROLS.tilt)
             updateControl('peak', DEFAULT_STICKER_CONTROLS.peak)
+            updateControl('mergeGradient', defaultMergeGradient)
           }}
         >
           变换
@@ -86,6 +92,17 @@ export function StickerAdvancedControls({
             onClick={() => updateControl('peak', !controls.peak)}
           >
             {controls.peak ? '错位攀登' : '对齐平铺'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            active={controls.mergeGradient}
+            type="button"
+            aria-pressed={controls.mergeGradient}
+            title="开启后图标与文字共用一段渐变；关闭时分别显示完整渐变"
+            onClick={() => updateControl('mergeGradient', !controls.mergeGradient)}
+          >
+            合并渐变
           </Button>
         </div>
       </div>

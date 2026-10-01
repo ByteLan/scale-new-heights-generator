@@ -144,7 +144,7 @@ export async function renderSticker(
   const outputContext = getContext(outputCanvas)
 
   // 把用户颜色规整为实际停靠点（单色自动补出同色系深色，方向由角度旋钮控制）。
-  const gradientStops = resolveGradientStops(renderControls.envelope.colors)
+  const gradientStops = resolveGradientStops(renderControls.envelope.colors, renderControls.flavor)
 
   // ---------- Glyph Tile Cache: pre-render each unique glyph once ----------
   // This is the key web optimization: avoids repeated strokeText/fillText calls.
@@ -184,10 +184,6 @@ export async function renderSticker(
         drawEmojiGlyphs(context, layout, renderControls.fontSize, renderControls.flavor, ox, oy)
       }
     }
-    // draw icon shape with the same outward expansion as text stroke
-    if (iconBitmap && iconBox) {
-      drawIconShape(context, lineWidth, ox, oy)
-    }
   }
 
   // Helper: draw text glyphs fill-only (uses cached fill tiles)
@@ -198,14 +194,13 @@ export async function renderSticker(
     }
   }
 
-  // Helper: create a solid filled shape canvas (stroke+fill+fillEnclosed)
-  const createSolidShapeCanvas = (lineWidth: number): OffscreenCanvas => {
+  // 文字描边蒙版；封闭区域在与图标合并后统一填充，保持原有轮廓。
+  const createTextOutlineCanvas = (lineWidth: number): OffscreenCanvas => {
     const canvas = createRuntimeCanvas(workingWidth, workingHeight)
     const ctx = getContext(canvas)
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = '#ffffff'
     drawStrokeAndFill(ctx, lineWidth)
-    fillEnclosedRegionsCanvas(canvas)
     return canvas
   }
 
@@ -227,26 +222,48 @@ export async function renderSticker(
     context.drawImage(iconCanvas, 0, 0)
   }
 
+  // 文字始终共用一段渐变；图标按合并设置取色。描边和字面复用同一区域。
+  const textOutlineCanvas = createTextOutlineCanvas(primaryStrokeWidth)
+  const iconOutlineCanvas = iconBitmap && iconBox && !controls.mergeGradient
+    ? createRuntimeCanvas(workingWidth, workingHeight)
+    : null
+  let outlineCanvas = textOutlineCanvas
+  if (iconOutlineCanvas) {
+    drawIconShape(getContext(iconOutlineCanvas), primaryStrokeWidth)
+    fillEnclosedRegionsCanvas(iconOutlineCanvas)
+    outlineCanvas = cloneCanvas(textOutlineCanvas)
+    getContext(outlineCanvas).drawImage(iconOutlineCanvas, 0, 0)
+  } else if (iconBitmap && iconBox) {
+    drawIconShape(getContext(outlineCanvas), primaryStrokeWidth)
+  }
+  fillEnclosedRegionsCanvas(outlineCanvas)
+  const gradientAngle = renderControls.envelope.gradientAngle
+  const textGradientExtent = gradientExtentFromCanvas(
+    controls.mergeGradient ? outlineCanvas : textOutlineCanvas,
+    gradientAngle,
+  )
+  const iconGradientExtent = iconOutlineCanvas && !controls.mergeGradient
+    ? gradientExtentFromCanvas(iconOutlineCanvas, gradientAngle)
+    : null
+  const fillGradient = (canvas: OffscreenCanvas, stops: string[]) => {
+    fillSourceInGradient(canvas, gradientAngle, stops, textGradientExtent)
+    if (iconOutlineCanvas && iconGradientExtent) {
+      const iconGradientCanvas = cloneCanvas(iconOutlineCanvas)
+      fillSourceInGradient(iconGradientCanvas, gradientAngle, stops, iconGradientExtent)
+      // 只替换已有图层上的颜色，保持字面、边缘环和抗锯齿的透明度不变。
+      compositeCanvas(getContext(canvas), iconGradientCanvas, 1, 'source-atop')
+    }
+  }
+
   if (renderControls.flavor === 'snh') {
     // 白色字形置于彩色包体内并带较深的边缘轮廓，另在字形下方叠加 multiply 混合
     // 阴影，使白字读起来像是浮在彩色主体之上（匹配源表情包）。
-    const bandWidth = renderControls.envelope.outlineStrokeWidth
-
     // Build the solid white envelope shape once — reused by all layers
-    const envelopeWhiteCanvas = createSolidShapeCanvas(bandWidth * 2)
-    const envelopeGradientExtent = gradientExtentFromCanvas(
-      envelopeWhiteCanvas,
-      renderControls.envelope.gradientAngle,
-    )
+    const envelopeWhiteCanvas = outlineCanvas
 
     // Layer 1: Envelope — dilated outline filled with gradient
     const envelopeCanvas = cloneCanvas(envelopeWhiteCanvas)
-    fillSourceInGradient(
-      envelopeCanvas,
-      renderControls.envelope.gradientAngle,
-      gradientStops,
-      envelopeGradientExtent,
-    )
+    fillGradient(envelopeCanvas, gradientStops)
     compositeCanvas(outputContext, envelopeCanvas)
 
     // Layer 2: Edge band — darkened ring between outer and inner boundary
@@ -260,12 +277,7 @@ export async function renderSticker(
       edgeCtx.globalCompositeOperation = 'destination-out'
       edgeCtx.drawImage(erodedCanvas, 0, 0)
       // Color the edge ring with darkened gradient
-      fillSourceInGradient(
-        edgeCanvas,
-        renderControls.envelope.gradientAngle,
-        gradientStops.map((color) => darken(color, 0.45)),
-        envelopeGradientExtent,
-      )
+      fillGradient(edgeCanvas, gradientStops.map((color) => darken(color, 0.45)))
       // Composite edge onto output with multiply blend
       compositeCanvas(outputContext, edgeCanvas, renderControls.envelope.edgeOpacity, 'multiply')
     }
@@ -311,23 +323,12 @@ export async function renderSticker(
     compositeCanvas(outputContext, glyphCanvas)
   } else {
     // 彩色字形直接由加深的同色系外层带包裹——没有白色描边。外扩部分就是加深后的颜色本身。
-    const rimWidth = renderControls.envelope.outlineStrokeWidth
-
     const { outline: byteOutlineStops, foreground: byteForegroundStops } =
       deriveByteStyleColors(gradientStops)
 
     // Layer 1: Deep outline — darkened gradient fill
-    const deepCanvas = createSolidShapeCanvas(rimWidth * 2)
-    const deepGradientExtent = gradientExtentFromCanvas(
-      deepCanvas,
-      renderControls.envelope.gradientAngle,
-    )
-    fillSourceInGradient(
-      deepCanvas,
-      renderControls.envelope.gradientAngle,
-      byteOutlineStops,
-      deepGradientExtent,
-    )
+    const deepCanvas = outlineCanvas
+    fillGradient(deepCanvas, byteOutlineStops)
     compositeCanvas(outputContext, deepCanvas)
 
     // Layer 2: Glyph fill — foreground gradient
@@ -335,12 +336,7 @@ export async function renderSticker(
     const glyphCtx = getContext(glyphCanvas)
     glyphCtx.fillStyle = '#ffffff'
     drawFillOnly(glyphCtx)
-    fillSourceInGradient(
-      glyphCanvas,
-      renderControls.envelope.gradientAngle,
-      byteForegroundStops,
-      deepGradientExtent,
-    )
+    fillGradient(glyphCanvas, byteForegroundStops)
     compositeCanvas(outputContext, glyphCanvas)
   }
 

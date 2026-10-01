@@ -1,6 +1,7 @@
 import { colorToOklab, oklabToColor, type Oklab } from './oklab'
 import { colorToHsl, colorToRgb, hslToRgb, rgbToHex } from './colorSpace'
 import { BYTE_STYLE_CALIBRATION } from '../config/byteStyleCalibration'
+import type { StickerFlavor } from '../config/defaults'
 
 function adjustHsl(base: string, adjustment: { lightness: number; saturation: number }): string {
   const color = colorToHsl(base)
@@ -23,11 +24,28 @@ export function deriveHighlightColor(base: string): string {
   return adjustHsl(base, { lightness: 0.06, saturation: 0.03 })
 }
 
-// 单色补出深、浅两端；双色和三色保留用户设置。
-export function resolveGradientStops(colors: string[]): string[] {
+// 同色系参考的 Oklab 明度跨度约 0.24–0.30；字节范基准色需给字面提亮留出空间。
+const SINGLE_COLOR_TONES = {
+  snh: { minLightness: 0.30, maxLightness: 0.92, span: 0.30 },
+  bs: { minLightness: 0.46, maxLightness: 0.78, span: 0.18 },
+} as const
+
+// 单色作为色系的感知中点；双色和三色保留用户设置。
+export function resolveGradientStops(colors: string[], flavor: StickerFlavor = 'snh'): string[] {
   if (colors.length <= 1) {
     const base = colors[0] ?? '#76baf4'
-    return [deriveDepthColor(base), deriveHighlightColor(base)]
+    const [lightness, a, b] = colorToOklab(base)
+    const tones = SINGLE_COLOR_TONES[flavor]
+    const halfSpan = tones.span / 2
+    const midpoint = Math.max(
+      tones.minLightness + halfSpan,
+      Math.min(tones.maxLightness - halfSpan, lightness),
+    )
+    return [midpoint - halfSpan, midpoint + halfSpan].map((tone) => {
+      // 深浅两侧降低色度，避免亮端变成荧光色；中性输入仍保持中性。
+      const chromaScale = Math.min(1, tone / lightness, (1 - tone) / (1 - lightness))
+      return oklabToColor([tone, a * chromaScale, b * chromaScale])
+    })
   }
   return colors
 }
@@ -76,75 +94,4 @@ export function deriveByteStyleColors(colors: string[]): {
     outline.push(oklabToColor([color[0] - lightness, color[1] - a, color[2] - b]))
   }
   return { foreground, outline }
-}
-
-function hueDistance(a: number, b: number): number {
-  const diff = Math.abs(a - b) % 360
-  return Math.min(diff, 360 - diff)
-}
-
-// 直接随机色相；尽量避开与当前色过近，避免连续点击几乎没变化。
-function pickAwayHue(base: string, random: () => number): number {
-  const h = Math.round(colorToHsl(base).h ?? 0)
-  let hue = random() * 360
-  for (let attempt = 0; attempt < 3 && hueDistance(hue, h) <= 28; attempt += 1) {
-    hue = random() * 360
-  }
-  return hue
-}
-
-function randomVividColor(base: string, random: () => number = Math.random): string {
-  const hue = pickAwayHue(base, random)
-  return rgbToHex(
-    hslToRgb({
-      mode: 'hsl',
-      h: ((hue % 360) + 360) % 360,
-      s: 0.72 + random() * 0.18,
-      l: 0.56 + random() * 0.1,
-    }),
-  )
-}
-
-function randomColorCount(random: () => number): 1 | 2 | 3 {
-  const roll = random()
-  if (roll < 0.5) return 1
-  if (roll < 0.9) return 2
-  return 3
-}
-
-// 勇攀高峰：默认模式，随机 1~3 个鲜亮颜色；1 个最多，3 个最少。
-export function randomVividColors(base: string, random: () => number = Math.random): string[] {
-  const colors: string[] = []
-  const count = randomColorCount(random)
-  let seed = base
-
-  for (let index = 0; index < count; index += 1) {
-    const color = randomVividColor(seed, random)
-    colors.push(color)
-    seed = color
-  }
-
-  return colors
-}
-
-// 字节范：一对同色系基准色；渲染时再分别派生深轮廓和浅前景。
-export function randomGradientPair(
-  base: string,
-  random: () => number = Math.random,
-): [string, string] {
-  const hue = pickAwayHue(base, random)
-  const hueOffset = (random() < 0.5 ? -1 : 1) * (16 + random() * 18)
-  const saturation = 0.96 + random() * 0.16
-
-  const make = (offset: number, lightness: number) =>
-    rgbToHex(
-      hslToRgb({
-        mode: 'hsl',
-        h: (((hue + offset) % 360) + 360) % 360,
-        s: saturation,
-        l: lightness,
-      }),
-    )
-
-  return [make(0, 0.56 + random() * 0.16), make(hueOffset, 0.56 + random() * 0.16)]
 }
