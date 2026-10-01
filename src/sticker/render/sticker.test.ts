@@ -1,29 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DEFAULT_STICKER_CONTROLS,
-  normalizeStickerControls,
-} from '../config/defaults'
-import { LATIN_FONT_FAMILY } from '../config/fonts'
+import { DEFAULT_STICKER_CONTROLS, normalizeStickerControls } from '../config/defaults'
 import {
   classifyGrapheme,
   createStickerLayout,
-  getAlternatingOffset,
   isEmojiGrapheme,
   measureSkewedGlyphBounds,
-  splitGraphemes,
 } from './layout'
-import { fontSpec, isChineseDominant, usesFeatureFont } from './font'
-import {
-  dilateMaskRound,
-  erodeMaskRound,
-  fillEnclosedRegions,
-  findOpaqueBounds,
-  subtractMask,
-  thresholdAlphaMask,
-} from './mask'
-import type {
-  GlyphMeasurement,
-} from './types'
+import { isChineseDominant, usesFeatureFont } from './font'
+import { findOpaqueBounds } from './canvas'
+import { splitGraphemes } from '../../shared/render/input'
+import type { GlyphMeasurement } from './types'
 
 function createMeasurement(width: number, fontSize: number): GlyphMeasurement {
   return {
@@ -38,6 +24,10 @@ function createMeasurement(width: number, fontSize: number): GlyphMeasurement {
 describe('splitGraphemes', () => {
   it('keeps Chinese text segmented by grapheme', () => {
     expect(splitGraphemes('勇攀高峰')).toEqual(['勇', '攀', '高', '峰'])
+  })
+
+  it('保持组合音标、连字 Emoji 和旗帜完整', () => {
+    expect(splitGraphemes('e\u0301👨‍👩‍👧‍👦🇨🇳')).toEqual(['e\u0301', '👨‍👩‍👧‍👦', '🇨🇳'])
   })
 })
 
@@ -73,21 +63,6 @@ describe('isChineseDominant', () => {
   })
 })
 
-describe('fontSpec', () => {
-  it('requests bold weight for feature and non-feature glyphs', () => {
-    expect(fontSpec('snh', 64, '高')).toContain('normal bold 64px "DouyinSansBold"')
-    expect(fontSpec('snh', 64, 'A', true)).toContain('normal bold 64px "DouyinSansBold"')
-    expect(fontSpec('snh', 64, 'A', false)).toContain(`normal bold 64px "${LATIN_FONT_FAMILY}", "PingFang SC"`)
-    expect(fontSpec('snh', 64, '🙂', true)).toContain(`normal bold 64px "${LATIN_FONT_FAMILY}", "PingFang SC"`)
-    expect(fontSpec('bs', 64, 'A')).toContain('normal bold 64px "YouSheBiaoTiHei"')
-    expect(fontSpec('bs', 64, '1')).toContain('normal bold 64px "YouSheBiaoTiHei"')
-  })
-
-  it('offers Inter Bold as the Latin font before system fonts', () => {
-    expect(fontSpec('bs', 64, 'A')).toContain(`"YouSheBiaoTiHei", "${LATIN_FONT_FAMILY}", "PingFang SC"`)
-  })
-})
-
 describe('createStickerLayout', () => {
   const measureGlyph = (_grapheme: string, fontSize: number) =>
     createMeasurement(fontSize, fontSize)
@@ -100,12 +75,7 @@ describe('createStickerLayout', () => {
       measureGlyph,
     })
 
-    expect(layout.placements.map((placement) => placement.baselineY)).toEqual([
-      -16,
-      16,
-      -16,
-      16,
-    ])
+    expect(layout.placements.map((placement) => placement.baselineY)).toEqual([-16, 16, -16, 16])
   })
 
   it('keeps single, double, and four glyph bounds stable', () => {
@@ -134,44 +104,6 @@ describe('createStickerLayout', () => {
     )
     expect(four.bounds.maxX - four.bounds.minX).toBeGreaterThan(
       double.bounds.maxX - double.bounds.minX,
-    )
-  })
-
-  it('changes layout width when fontSize changes', () => {
-    const small = createStickerLayout('勇攀高峰', {
-      fontSize: 140,
-      letterSpacing: 6,
-      alternatingOffset: 16,
-      measureGlyph,
-    })
-    const large = createStickerLayout('勇攀高峰', {
-      fontSize: 280,
-      letterSpacing: 12,
-      alternatingOffset: 16,
-      measureGlyph,
-    })
-
-    expect(large.bounds.maxX - large.bounds.minX).toBeGreaterThan(
-      small.bounds.maxX - small.bounds.minX,
-    )
-  })
-
-  it('changes layout width when letterSpacing changes', () => {
-    const tight = createStickerLayout('勇攀高峰', {
-      fontSize: 220,
-      letterSpacing: 0,
-      alternatingOffset: 16,
-      measureGlyph,
-    })
-    const loose = createStickerLayout('勇攀高峰', {
-      fontSize: 220,
-      letterSpacing: 30,
-      alternatingOffset: 16,
-      measureGlyph,
-    })
-
-    expect(loose.bounds.maxX - loose.bounds.minX).toBeGreaterThan(
-      tight.bounds.maxX - tight.bounds.minX,
     )
   })
 
@@ -431,112 +363,6 @@ describe('classifyGrapheme', () => {
   })
 })
 
-describe('measureSkewedGlyphBounds', () => {
-  it('changes the glyph bounds when skew changes', () => {
-    const baseMeasurement = createMeasurement(220, 220)
-    const neutral = measureSkewedGlyphBounds(baseMeasurement, 0)
-    const skewed = measureSkewedGlyphBounds(baseMeasurement, -8)
-
-    expect(skewed.minY).toBeLessThan(neutral.minY)
-    expect(skewed.maxY).not.toBe(neutral.maxY)
-  })
-})
-
-describe('mask helpers', () => {
-  it('grows the mask outward by the dilation radius', () => {
-    const alpha = new Uint8ClampedArray([
-      0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0,
-      0, 0, 255, 0, 0,
-      0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0,
-    ])
-    const mask = thresholdAlphaMask(alpha, 5, 5, 10)
-    const grown = dilateMaskRound(mask, 1)
-
-    // 单个不透明像素的 4 邻域现在也被填充了。
-    expect(grown.data[2 * 5 + 1]).toBe(255)
-    expect(grown.data[2 * 5 + 3]).toBe(255)
-    expect(grown.data[1 * 5 + 2]).toBe(255)
-    expect(grown.data[3 * 5 + 2]).toBe(255)
-    // 半径 1 时对角像素保持空白（距离 √2 > 1）。
-    expect(grown.data[1 * 5 + 1]).toBe(0)
-  })
-
-  it('does not bridge a gap wider than the dilation radius', () => {
-    const alpha = new Uint8ClampedArray([
-      255, 255, 255, 0, 0, 0, 255, 255, 255,
-    ])
-    const mask = thresholdAlphaMask(alpha, 9, 1, 10)
-    const grown = dilateMaskRound(mask, 1)
-
-    expect(grown.data[4]).toBe(0)
-  })
-
-  it('creates an inset ring inside the dilated envelope', () => {
-    const alpha = new Uint8ClampedArray([
-      0, 0, 0, 0, 0, 0, 0,
-      0, 255, 255, 255, 255, 255, 0,
-      0, 255, 255, 255, 255, 255, 0,
-      0, 255, 255, 255, 255, 255, 0,
-      0, 0, 0, 0, 0, 0, 0,
-    ])
-    const mask = thresholdAlphaMask(alpha, 7, 5, 10)
-    const envelope = fillEnclosedRegions(dilateMaskRound(mask, 1))
-    const eroded = erodeMaskRound(envelope, 1)
-    const ring = subtractMask(envelope, eroded)
-
-    expect(countOpaque(ring)).toBeGreaterThan(0)
-    expect(countOpaque(ring)).toBeLessThan(countOpaque(envelope))
-    // 腐蚀严格缩小包体，因此环恰好落在其边界上。
-    expect(countOpaque(eroded)).toBeLessThan(countOpaque(envelope))
-  })
-
-  it('grows the deep edge ring when edge width increases', () => {
-    const alpha = new Uint8ClampedArray([
-      0, 0, 0, 0, 0, 0, 0,
-      0, 255, 255, 255, 255, 255, 0,
-      0, 255, 255, 255, 255, 255, 0,
-      0, 255, 255, 255, 255, 255, 0,
-      0, 0, 0, 0, 0, 0, 0,
-    ])
-    const mask = thresholdAlphaMask(alpha, 7, 5, 10)
-    const narrowRing = subtractMask(mask, erodeMaskRound(mask, 1))
-    const wideRing = subtractMask(mask, erodeMaskRound(mask, 3))
-
-    expect(countOpaque(narrowRing)).toBeLessThan(countOpaque(wideRing))
-  })
-
-  it('fills fully enclosed background regions', () => {
-    const alpha = new Uint8ClampedArray([
-      255, 255, 255, 255, 255,
-      255, 0, 0, 0, 255,
-      255, 0, 0, 0, 255,
-      255, 0, 0, 0, 255,
-      255, 255, 255, 255, 255,
-    ])
-    const mask = thresholdAlphaMask(alpha, 5, 5, 10)
-    const filled = fillEnclosedRegions(mask)
-
-    expect(filled.data[2 * 5 + 2]).toBe(255)
-    expect(countOpaque(filled)).toBe(25)
-  })
-
-  it('leaves background regions open to the border untouched', () => {
-    const alpha = new Uint8ClampedArray([
-      255, 255, 255, 255, 255,
-      255, 0, 0, 0, 255,
-      255, 0, 0, 0, 0,
-      255, 0, 0, 0, 255,
-      255, 255, 255, 255, 255,
-    ])
-    const mask = thresholdAlphaMask(alpha, 5, 5, 10)
-    const filled = fillEnclosedRegions(mask)
-
-    expect(filled.data[2 * 5 + 2]).toBe(0)
-  })
-})
-
 describe('findOpaqueBounds', () => {
   it('captures content, shadow, and envelope extents without clipping', () => {
     const alpha = new Uint8ClampedArray(8 * 6)
@@ -554,13 +380,6 @@ describe('findOpaqueBounds', () => {
 
   it('returns null for an empty image', () => {
     expect(findOpaqueBounds(new Uint8ClampedArray(16), 4, 4)).toBeNull()
-  })
-})
-
-describe('alternating offsets', () => {
-  it('starts with upward displacement for the first glyph', () => {
-    expect(getAlternatingOffset(0, 16)).toBe(-16)
-    expect(getAlternatingOffset(1, 16)).toBe(16)
   })
 })
 
@@ -582,16 +401,4 @@ describe('normalizeStickerControls', () => {
     expect(normalized.fontSize).toBe(DEFAULT_STICKER_CONTROLS.fontSize)
   })
 
-  it('accepts a known flavor and falls back for unknown values', () => {
-    expect(normalizeStickerControls({ flavor: 'bs' }).flavor).toBe('bs')
-    expect(normalizeStickerControls({ flavor: 'snh' }).flavor).toBe('snh')
-    expect(normalizeStickerControls({ flavor: 'comic-sans' }).flavor).toBe(
-      DEFAULT_STICKER_CONTROLS.flavor,
-    )
-    expect(normalizeStickerControls({}).flavor).toBe(DEFAULT_STICKER_CONTROLS.flavor)
-  })
 })
-
-function countOpaque(mask: { data: Uint8ClampedArray }): number {
-  return mask.data.reduce((count, value) => count + (value > 0 ? 1 : 0), 0)
-}

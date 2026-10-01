@@ -1,6 +1,4 @@
-export interface CanvasContextOptions {
-  willReadFrequently?: boolean
-}
+export type CanvasContextOptions = Pick<CanvasRenderingContext2DSettings, 'willReadFrequently'>
 
 export function getContext(
   canvas: OffscreenCanvas,
@@ -16,6 +14,8 @@ export function getContext(
 
   return context
 }
+
+export type CanvasRenderResult = ReturnType<typeof renderResultFromCanvas>
 
 export function renderResultFromCanvas(canvas: OffscreenCanvas) {
   return {

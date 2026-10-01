@@ -22,6 +22,10 @@ export {
   darken,
   deriveDepthColor,
   deriveByteStyleColors,
-  randomVividColors,
   resolveGradientStops,
 } from './utils/color'
+export {
+  randomVividColors,
+  randomStickerColors,
+  type RandomStickerColorsOptions,
+} from './utils/randomPalette'

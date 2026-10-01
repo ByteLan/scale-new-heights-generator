@@ -1,3 +1,4 @@
+import { clampNumber, isRecord } from '../../shared/config/normalize'
 import {
   ANTIALIAS_SCALE_MAX,
   ANTIALIAS_SCALE_MIN,
@@ -39,14 +40,20 @@ export interface StickerPaddingControls {
 // 渲染风味标识（命名对应参考表情包）。每种风味同时决定展示字面与配色/描边模型：
 //   • snh (勇攀高峰)：白色字形置于彩色渐变包体内——抖音美好体字面。
 //   • bs  (字节范)：彩色渐变字形带同色系深色轮廓——优设标题黑字面。
-export type StickerFlavor = 'snh' | 'bs'
+export type StickerFlavor = keyof typeof STICKER_DEFAULT_OUTLINE_WIDTH
 
-/** 贴纸渲染风味列表 */
-export const STICKER_FLAVORS: StickerFlavor[] = ['snh', 'bs']
 /** 每种贴纸风味的默认描边厚度 */
-export const STICKER_DEFAULT_OUTLINE_WIDTH: Record<StickerFlavor, number> = {
+export const STICKER_DEFAULT_OUTLINE_WIDTH = {
   snh: 20,
   bs: 14,
+}
+/** 贴纸渲染风味列表 */
+export const STICKER_FLAVORS = Object.keys(STICKER_DEFAULT_OUTLINE_WIDTH) as StickerFlavor[]
+
+/** 字节范图标与文字共用渐变；勇攀高峰分别显示完整渐变 */
+export const STICKER_DEFAULT_MERGE_GRADIENT: Record<StickerFlavor, boolean> = {
+  snh: false,
+  bs: true,
 }
 
 // 渲染倍率的单一真源：默认值与合法区间都只在这里定义，
@@ -79,6 +86,8 @@ export interface StickerControls {
   tilt: boolean
   /** 图标倾斜：开启时前缀图标跟随字面旋转/斜切 */
   iconTilt: boolean
+  /** 合并图标与文字的渐变区域；默认值随风味变化 */
+  mergeGradient: boolean
   /** 内部超采样倍率，用于平滑斜线和斜切边缘 */
   antialiasScale: number
   /** 开启后导出 Ultra HDR JPEG gain map；普通路径仍导出 PNG */
@@ -103,6 +112,7 @@ export const DEFAULT_STICKER_CONTROLS: StickerControls = {
   peak: true,
   tilt: true,
   iconTilt: true,
+  mergeGradient: STICKER_DEFAULT_MERGE_GRADIENT.snh,
   antialiasScale: DEFAULT_ANTIALIAS_SCALE,
   flash: false,
   flashStops: DEFAULT_FLASH_STOPS,
@@ -184,6 +194,10 @@ export function normalizeStickerControls(value: unknown): StickerControls {
       typeof input.iconTilt === 'boolean'
         ? input.iconTilt
         : DEFAULT_STICKER_CONTROLS.iconTilt,
+    mergeGradient:
+      typeof input.mergeGradient === 'boolean'
+        ? input.mergeGradient
+        : STICKER_DEFAULT_MERGE_GRADIENT[flavor],
     antialiasScale: clampNumber(
       input.antialiasScale,
       ANTIALIAS_SCALE_MIN,
@@ -258,20 +272,6 @@ export function normalizeStickerControls(value: unknown): StickerControls {
     },
   }
 }
-
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
-    return fallback
-  }
-
-  return Math.min(max, Math.max(min, value))
-}
-
 function normalizeColor(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback
 }
@@ -284,8 +284,4 @@ function normalizeColors(value: unknown, fallback: string[]): string[] {
   )
   if (colors.length === 0) return fallback
   return colors.slice(0, 3)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }

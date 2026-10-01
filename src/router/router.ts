@@ -1,3 +1,4 @@
+import { validateStringSearch } from '../shared/config/searchParams'
 import {
   Outlet,
   createHashHistory,
@@ -50,14 +51,6 @@ export const router = createRouter({
   stringifySearch,
 })
 
-function validateStringSearch(search: Record<string, unknown>): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const [key, value] of Object.entries(search)) {
-    if (typeof value === 'string') result[key] = value
-    else if (typeof value === 'number') result[key] = String(value)
-  }
-  return result
-}
 
 declare module '@tanstack/react-router' {
   interface Register {

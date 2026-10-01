@@ -1,46 +1,19 @@
+import type { StickerEditor } from '../../hooks/useStickerEditor'
 import { AdvancedSection } from '../../../shared/components/AdvancedSection'
 import { Button } from '../../../shared/ui/button'
 import { FieldLabel } from '../../../shared/components/FieldLabel'
 import { HdrControls } from '../../../shared/components/HdrControls'
 import { SliderField } from '../../../shared/components/SliderField'
-import { hasChangedFields } from '../../../shared/utils/controlsDiff'
 import {
   DEFAULT_STICKER_CONTROLS,
   STICKER_DEFAULT_OUTLINE_WIDTH,
-  type StickerControls,
-  type StickerEnvelopeControls,
-  type StickerPaddingControls,
+  STICKER_DEFAULT_MERGE_GRADIENT,
 } from '../../config/defaults'
 
-// 高级面板关注的字段：任一偏离默认值就默认展开。新增字段只加一行访问器。
-const ADVANCED_FIELDS: ReadonlyArray<(c: StickerControls) => unknown> = [
-  (c) => c.iconTilt,
-  (c) => c.tilt,
-  (c) => c.peak,
-  (c) => c.flash,
-  (c) => c.flashStops,
-  (c) => c.antialiasScale,
-  (c) => c.envelope.outlineStrokeWidth,
-  (c) => c.padding.x,
-  (c) => c.padding.y,
-  (c) => c.lineHeight,
-]
-
-interface StickerAdvancedControlsProps {
-  controls: StickerControls
-  updateControl: <K extends keyof StickerControls>(
-    key: K,
-    value: StickerControls[K],
-  ) => void
-  updateEnvelope: <K extends keyof StickerEnvelopeControls>(
-    key: K,
-    value: StickerEnvelopeControls[K],
-  ) => void
-  updatePadding: <K extends keyof StickerPaddingControls>(
-    key: K,
-    value: StickerPaddingControls[K],
-  ) => void
-}
+type StickerAdvancedControlsProps = Pick<
+  StickerEditor,
+  'controls' | 'updateControl' | 'updateEnvelope' | 'updatePadding'
+>
 
 export function StickerAdvancedControls({
   controls,
@@ -49,15 +22,20 @@ export function StickerAdvancedControls({
   updatePadding,
 }: StickerAdvancedControlsProps) {
   const defaultOutlineWidth = STICKER_DEFAULT_OUTLINE_WIDTH[controls.flavor]
-  // 描边默认值随 flavor 变化，构造对应基准后再统一比较。
-  const baseline: StickerControls = {
-    ...DEFAULT_STICKER_CONTROLS,
-    envelope: {
-      ...DEFAULT_STICKER_CONTROLS.envelope,
-      outlineStrokeWidth: defaultOutlineWidth,
-    },
-  }
-  const hasAdvancedParams = hasChangedFields(controls, baseline, ADVANCED_FIELDS)
+  const defaultMergeGradient = STICKER_DEFAULT_MERGE_GRADIENT[controls.flavor]
+  const defaults = DEFAULT_STICKER_CONTROLS
+  const hasAdvancedParams =
+    controls.mergeGradient !== defaultMergeGradient ||
+    controls.iconTilt !== defaults.iconTilt ||
+    controls.tilt !== defaults.tilt ||
+    controls.peak !== defaults.peak ||
+    controls.flash !== defaults.flash ||
+    controls.flashStops !== defaults.flashStops ||
+    controls.antialiasScale !== defaults.antialiasScale ||
+    controls.envelope.outlineStrokeWidth !== defaultOutlineWidth ||
+    controls.padding.x !== defaults.padding.x ||
+    controls.padding.y !== defaults.padding.y ||
+    controls.lineHeight !== defaults.lineHeight
 
   return (
     <AdvancedSection defaultOpen={hasAdvancedParams}>
@@ -66,12 +44,14 @@ export function StickerAdvancedControls({
           isDirty={
             controls.iconTilt !== DEFAULT_STICKER_CONTROLS.iconTilt ||
             controls.tilt !== DEFAULT_STICKER_CONTROLS.tilt ||
-            controls.peak !== DEFAULT_STICKER_CONTROLS.peak
+            controls.peak !== DEFAULT_STICKER_CONTROLS.peak ||
+            controls.mergeGradient !== defaultMergeGradient
           }
           onReset={() => {
             updateControl('iconTilt', DEFAULT_STICKER_CONTROLS.iconTilt)
             updateControl('tilt', DEFAULT_STICKER_CONTROLS.tilt)
             updateControl('peak', DEFAULT_STICKER_CONTROLS.peak)
+            updateControl('mergeGradient', defaultMergeGradient)
           }}
         >
           变换
@@ -112,6 +92,17 @@ export function StickerAdvancedControls({
             onClick={() => updateControl('peak', !controls.peak)}
           >
             {controls.peak ? '错位攀登' : '对齐平铺'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            active={controls.mergeGradient}
+            type="button"
+            aria-pressed={controls.mergeGradient}
+            title="开启后图标与文字共用一段渐变；关闭时分别显示完整渐变"
+            onClick={() => updateControl('mergeGradient', !controls.mergeGradient)}
+          >
+            合并渐变
           </Button>
         </div>
       </div>

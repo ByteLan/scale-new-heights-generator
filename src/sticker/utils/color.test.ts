@@ -1,144 +1,166 @@
 import { describe, expect, it } from 'vitest'
-import { colorToHsl } from './colorSpace'
-import {
-  colorInputValue,
-  darken,
-  deriveDepthColor,
-  deriveHighlightColor,
-  lighten,
-  randomGradientPair,
-  randomVividColors,
-  resolveGradientStops,
-} from './color'
-
-describe('deriveDepthColor', () => {
-  it('keeps hue while producing a darker companion', () => {
-    const base = '#4c9acc'
-    const depth = deriveDepthColor(base)
-    const a = colorToHsl(base)
-    const b = colorToHsl(depth)
-
-    expect(Math.abs((a.h ?? 0) - (b.h ?? 0))).toBeLessThan(2)
-    expect(b.l).toBeLessThan(a.l)
-  })
-
-  it('keeps light colors from becoming too deep or gray', () => {
-    const base = '#66ffcc'
-    const depth = deriveDepthColor(base)
-    const a = colorToHsl(base)
-    const b = colorToHsl(depth)
-
-    expect(b.l).toBeLessThan(a.l)
-    expect(a.l - b.l).toBeLessThan(0.18)
-    expect(b.l).toBeGreaterThan(0.55)
-    expect(b.s).toBeGreaterThanOrEqual(0.60)
-    expect(b.s).toBeLessThan(a.s)
-  })
-})
-
-describe('deriveHighlightColor', () => {
-  it('keeps hue while producing a lighter companion', () => {
-    const base = '#4c9acc'
-    const highlight = deriveHighlightColor(base)
-    const a = colorToHsl(base)
-    const b = colorToHsl(highlight)
-
-    expect(Math.abs((a.h ?? 0) - (b.h ?? 0))).toBeLessThan(2)
-    expect(b.l).toBeGreaterThan(a.l)
-  })
-})
+import reference from '../../../scripts/fixtures/byte-style-palettes.json'
+import { STICKER_PRESET_GROUPS } from '../config/presets'
+import { colorToRgb } from './colorSpace'
+import { colorInputValue, deriveByteStyleColors, resolveGradientStops } from './color'
+import { colorToOklab } from './oklab'
+import { randomStickerColors } from './randomPalette'
 
 describe('resolveGradientStops', () => {
-  it('expands a single color into a [dark, light] pair', () => {
-    const base = '#4c9acc'
-    const [dark, light] = resolveGradientStops([base])
-    expect(colorToHsl(dark).l).toBeLessThan(colorToHsl(base).l)
-    expect(colorToHsl(light).l).toBeGreaterThan(colorToHsl(base).l)
-    expect(colorToHsl(dark).l).toBeLessThan(colorToHsl(light).l)
-  })
-
   it('passes two/three colors through unchanged', () => {
-    expect(resolveGradientStops(['#111111', '#222222'])).toEqual([
-      '#111111',
-      '#222222',
-    ])
+    expect(resolveGradientStops(['#111111', '#222222'])).toEqual(['#111111', '#222222'])
     expect(resolveGradientStops(['#111111', '#222222', '#333333'])).toEqual([
       '#111111',
       '#222222',
       '#333333',
     ])
   })
+})
 
-  it('falls back to a default pair when empty', () => {
-    expect(resolveGradientStops([]).length).toBe(2)
+describe('CSS color input', () => {
+  it.each([
+    ['#9f6', '#99ff66'],
+    ['#1234', '#11223344'],
+    ['rgb(10, 20, 30)', '#0a141e'],
+    ['RGB(100% 0% 50% / 50%)', '#ff008080'],
+    ['hsl(120, 100%, 50%)', '#00ff00'],
+    ['hsl(0.5turn 100% 50% / 25%)', '#00ffff40'],
+    ['rgb(300 -20 128)', '#ff0080'],
+    ['not-a-color', '#000000'],
+  ])('normalizes %s to %s', (input, hex) => {
+    expect(colorInputValue(input)).toBe(hex)
   })
 })
 
-describe('colorInputValue', () => {
-  it('normalizes shorthand hex for native color inputs', () => {
-    expect(colorInputValue('#9f6')).toBe('#99ff66')
-    expect(colorInputValue('#8fd')).toBe('#88ffdd')
-  })
-})
+const distance = (a: string, b: string) => {
+  const x = colorToOklab(a), y = colorToOklab(b)
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2])
+}
 
-describe('darken', () => {
-  it('scales rgb channels toward black', () => {
-    expect(darken('#ffffff', 0.5)).toBe('rgb(128, 128, 128)')
-    expect(darken('#808080', 0)).toBe('rgb(128, 128, 128)')
-  })
-})
-
-describe('randomVividColors', () => {
-  it('is deterministic given a seeded random and returns 1 to 3 hex colors', () => {
-    let seed = 0.2
-    const random = () => {
-      seed = (seed * 9301 + 49297) % 233280
-      return seed / 233280
+describe('deriveByteStyleColors', () => {
+  it('approximates both reference gradients using two shared midpoint stops', () => {
+    const errors: number[] = []
+    for (const preset of STICKER_PRESET_GROUPS.字节范) {
+      expect(preset.colors).toHaveLength(2)
+      const palette = deriveByteStyleColors(preset.colors)
+      const target = reference[preset.text as keyof typeof reference]
+      const presetErrors: number[] = []
+      for (const layer of ['foreground', 'outline'] as const) {
+        for (let stop = 0; stop < 2; stop++) presetErrors.push(distance(palette[layer][stop], target[layer][stop]))
+      }
+      expect(Math.max(...presetErrors)).toBeLessThan(0.08)
+      expect(presetErrors.reduce((sum, v) => sum + v, 0) / 4).toBeLessThan(0.045)
+      errors.push(...presetErrors)
     }
-    const colors = randomVividColors('#1d8df0', random)
-    expect(colors.length).toBeGreaterThanOrEqual(1)
-    expect(colors.length).toBeLessThanOrEqual(3)
-    for (const color of colors) {
-      expect(color).toMatch(/^#[0-9a-f]{6}$/)
+    expect(errors.reduce((sum, v) => sum + v, 0) / errors.length).toBeLessThan(0.032)
+  })
+
+  it('keeps a visible lightness separation across each reference palette', () => {
+    for (const preset of STICKER_PRESET_GROUPS.字节范) {
+      const { foreground, outline } = deriveByteStyleColors(preset.colors)
+      for (let stop = 0; stop < 2; stop++) {
+        expect(colorToOklab(foreground[stop])[0] - colorToOklab(outline[stop])[0]).toBeGreaterThan(0.18)
+      }
     }
   })
 
-  it('usually returns one color, sometimes two, and rarely three', () => {
-    expect(randomVividColors('#76baf4', () => 0.4)).toHaveLength(1)
-    expect(randomVividColors('#76baf4', () => 0.7)).toHaveLength(2)
-    expect(randomVividColors('#76baf4', () => 0.95)).toHaveLength(3)
+  it('reverses both derived gradients when input stops are reversed', () => {
+    const colors = ['#ee8ebf', '#c65479']
+    const forward = deriveByteStyleColors(colors)
+    const reverse = deriveByteStyleColors([...colors].reverse())
+    expect(reverse.foreground).toEqual([...forward.foreground].reverse())
+    expect(reverse.outline).toEqual([...forward.outline].reverse())
+  })
+
+  it('supports single and three-stop input and keeps neutral colors neutral', () => {
+    for (const colors of [['#000000'], ['#eeeeee'], ['#000000', '#888888', '#ffffff']]) {
+      const palette = deriveByteStyleColors(colors)
+      expect(palette.foreground).toHaveLength(colors.length)
+      expect(palette.outline).toHaveLength(colors.length)
+      for (const color of [...palette.foreground, ...palette.outline]) {
+        const { r, g, b } = colorToRgb(color)
+        expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(1 / 255)
+      }
+    }
   })
 })
 
-describe('lighten', () => {
-  it('scales rgb channels toward white', () => {
-    expect(lighten('#000000', 0.5)).toBe('rgb(128, 128, 128)')
-    expect(lighten('#808080', 0)).toBe('rgb(128, 128, 128)')
+function seededRandom(seed: number) {
+  return () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+    return seed / 2 ** 32
+  }
+}
+
+const hue = (color: string) => {
+  const [, a, b] = colorToOklab(color)
+  return Math.atan2(b, a) * 180 / Math.PI
+}
+const hueDistance = (a: string, b: string) => {
+  const difference = Math.abs(hue(a) - hue(b)) % 360
+  return Math.min(difference, 360 - difference)
+}
+
+describe('随机配色', () => {
+  it('两种风味都支持指定色数和可重现的随机种子', () => {
+    for (const flavor of ['snh', 'bs'] as const) {
+      for (const count of [1, 2, 3] as const) {
+        const options = { flavor, count }
+        const colors = randomStickerColors('#148ded', options, seededRandom(73))
+        expect(colors).toHaveLength(count)
+        expect(colors).toEqual(randomStickerColors('#148ded', options, seededRandom(73)))
+        for (const color of colors) expect(color).toMatch(/^#[0-9a-f]{6}$/)
+      }
+    }
   })
-})
 
-describe('randomGradientPair', () => {
-  it('returns two same-family base stops for the byte-style flavor', () => {
-    let seed = 0.42
-    const random = () => {
-      seed = (seed * 9301 + 49297) % 233280
-      return seed / 233280
+  it('单色保留输入深端，并派生更亮、更接近中性的浅端', () => {
+    for (const color of ['#123268', '#148ded', '#cc3300', '#339944']) {
+      const [dark, light] = resolveGradientStops([color])
+      const [l, a, b] = colorToOklab(color)
+      const [highlight, ha, hb] = colorToOklab(light)
+      expect(dark).toBe(color)
+      expect(highlight - l).toBeGreaterThan(0.15)
+      expect(Math.hypot(ha, hb)).toBeLessThan(Math.hypot(a, b))
     }
-    const colors = randomGradientPair('#1d8df0', random)
+    for (const base of ['#000000', '#888888', '#ffffff']) {
+      for (const color of resolveGradientStops([base])) {
+        const [, a, b] = colorToOklab(color)
+        expect(Math.hypot(a, b)).toBeLessThan(0.001)
+        expect(colorToOklab(color)[0]).toBeGreaterThanOrEqual(colorToOklab(base)[0] - 0.001)
+      }
+    }
+  })
 
-    expect(colors).toHaveLength(2)
-    for (const color of colors) {
-      expect(color).toMatch(/^#[0-9a-f]{6}$/)
+  it('双色能覆盖同色系、邻色与跨色相，三色能生成深色中段', () => {
+    const random = seededRandom(184)
+    const gaps: number[] = []
+    let hasDeepMiddle = false
+    for (let sample = 0; sample < 200; sample++) {
+      const pair = randomStickerColors('#148ded', { count: 2 }, random)
+      gaps.push(hueDistance(pair[0], pair[1]))
+      const tones = randomStickerColors('#148ded', { count: 3 }, random).map(color => colorToOklab(color)[0])
+      hasDeepMiddle ||= tones[1] < Math.min(tones[0], tones[2]) - 0.15
     }
-    // 字节范渲染时从基准色派生深轮廓，文字只轻微提亮。
-    for (const color of colors) {
-      const base = colorToHsl(color).l
-      const outline = colorToHsl(darken(color, 0.24)).l
-      const foreground = colorToHsl(lighten(color, 0.12)).l
-      expect(outline).toBeLessThan(base)
-      expect(base - outline).toBeGreaterThan(0.12)
-      expect(foreground).toBeGreaterThan(base)
-      expect(foreground - base).toBeLessThan(0.08)
+    expect(gaps.some(gap => gap < 15)).toBe(true)
+    expect(gaps.some(gap => gap > 20 && gap < 80)).toBe(true)
+    expect(gaps.some(gap => gap > 130)).toBe(true)
+    expect(hasDeepMiddle).toBe(true)
+  })
+
+  it('字节范随机色经过最终字面提亮后，也不会变成近白色', () => {
+    const random = seededRandom(73)
+    for (const count of [1, 2, 3] as const) {
+      for (let sample = 0; sample < 300; sample++) {
+        const colors = randomStickerColors('#148ded', { flavor: 'bs', count }, random)
+        const { foreground, outline } = deriveByteStyleColors(resolveGradientStops(colors, 'bs'))
+        for (const [index, color] of foreground.entries()) {
+          const [l, a, b] = colorToOklab(color)
+          expect(l).toBeLessThanOrEqual(0.921)
+          expect(l <= 0.841 || Math.hypot(a, b) >= 0.044).toBe(true)
+          expect(l - colorToOklab(outline[index])[0]).toBeGreaterThan(0.18)
+        }
+      }
     }
   })
 })

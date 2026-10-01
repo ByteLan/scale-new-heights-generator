@@ -3,8 +3,7 @@ import { colorToRgb, clampUnit } from './colorSpace'
 
 export type Oklab = readonly [lightness: number, a: number, b: number]
 
-// Allow floating-point noise at sRGB boundaries. Sixteen bisections resolve
-// chroma more finely than the final 8-bit RGB output can represent.
+// 允许 sRGB 边界的浮点误差；16 次二分的精度已超过最终 8 位 RGB 输出。
 const GAMUT_TOLERANCE = 1e-7
 const GAMUT_SEARCH_STEPS = 16
 
@@ -18,15 +17,15 @@ function rgb([l, a, b]: Oklab): readonly number[] {
   return [converted.r, converted.g, converted.b]
 }
 
-/** Reduce out-of-gamut chroma at fixed lightness and hue. Low-level Culori
- * converters do not require registering the Oklab color space. */
+/** 保持明度和色相，通过缩减色度映射到 sRGB 色域。 */
 export function oklabToColor([lightness, a, b]: Oklab): string {
   const L = clampUnit(lightness)
-  const inGamut = (channels: readonly number[]) => channels.every((v) =>
-    v >= -GAMUT_TOLERANCE && v <= 1 + GAMUT_TOLERANCE)
+  const inGamut = (channels: readonly number[]) =>
+    channels.every((v) => v >= -GAMUT_TOLERANCE && v <= 1 + GAMUT_TOLERANCE)
   let channels = rgb([L, a, b])
   if (!inGamut(channels)) {
-    let lower = 0, upper = 1
+    let lower = 0
+    let upper = 1
     for (let step = 0; step < GAMUT_SEARCH_STEPS; step++) {
       const scale = (lower + upper) / 2
       if (inGamut(rgb([L, a * scale, b * scale]))) lower = scale

@@ -1,4 +1,5 @@
-import type { BinaryMask, GradientExtent } from './types'
+import { getContext } from '../../shared/render/canvas'
+import type { GradientExtent } from './types'
 
 export function createGradient(
   context: OffscreenCanvasRenderingContext2D,
@@ -28,18 +29,25 @@ export function createGradient(
   return gradient
 }
 
-export function gradientExtentFromMask(mask: BinaryMask, angleDeg: number): GradientExtent {
+/** 按可见像素中心的投影确定渐变两端，使端点颜色完整显示。 */
+export function gradientExtentFromCanvas(
+  canvas: OffscreenCanvas,
+  angleDeg: number,
+): GradientExtent {
+  const { width, height } = canvas
+  const ctx = getContext(canvas)
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const { data } = imageData
+
   const angle = ((angleDeg - 90) * Math.PI) / 180
   const dx = Math.cos(angle)
   const dy = Math.sin(angle)
   let startProjection = Number.POSITIVE_INFINITY
   let endProjection = Number.NEGATIVE_INFINITY
 
-  for (let y = 0; y < mask.height; y += 1) {
-    for (let x = 0; x < mask.width; x += 1) {
-      if (mask.data[y * mask.width + x] === 0) continue
-
-      // 用像素中心做投影，stop 0/1 对应实际可见蒙版在该方向上的两端。
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (data[(y * width + x) * 4 + 3] === 0) continue
       const projection = (x + 0.5) * dx + (y + 0.5) * dy
       startProjection = Math.min(startProjection, projection)
       endProjection = Math.max(endProjection, projection)
@@ -47,9 +55,7 @@ export function gradientExtentFromMask(mask: BinaryMask, angleDeg: number): Grad
   }
 
   if (!Number.isFinite(startProjection) || endProjection <= startProjection) {
-    const fallbackWidth = Math.max(1, mask.width)
-    const fallbackHeight = Math.max(1, mask.height)
-    const fallbackEnd = Math.abs(dx) * fallbackWidth + Math.abs(dy) * fallbackHeight
+    const fallbackEnd = Math.abs(dx) * Math.max(1, width) + Math.abs(dy) * Math.max(1, height)
     return { startProjection: 0, endProjection: fallbackEnd }
   }
 

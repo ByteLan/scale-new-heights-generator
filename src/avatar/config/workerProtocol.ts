@@ -1,8 +1,4 @@
+import type { ImageWorkerRequest } from '../../shared/worker/imageWorker'
 import type { AvatarControls } from './defaults'
-import type { ImageWorkerResponse } from '../../shared/worker/imageWorker'
 
-export type AvatarWorkerRequest =
-  | { type: 'render'; id: number; controls: AvatarControls }
-  | { type: 'export'; id: number; controls: AvatarControls }
-
-export type AvatarWorkerResponse = ImageWorkerResponse
+export type AvatarWorkerRequest = ImageWorkerRequest<AvatarControls>

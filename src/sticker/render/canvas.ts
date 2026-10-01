@@ -1,11 +1,8 @@
-import { findOpaqueBounds } from './mask'
-import { createRuntimeCanvas } from './runtime'
+import { createRuntimeCanvas } from '../../shared/render/runtime'
 import type { OpaqueBounds } from './types'
 import { getContext } from '../../shared/render/canvas'
 
-export { getContext }
-
-export function extractAlphaChannel(rgba: Uint8ClampedArray): Uint8ClampedArray {
+function extractAlphaChannel(rgba: Uint8ClampedArray): Uint8ClampedArray {
   const alpha = new Uint8ClampedArray(rgba.length / 4)
 
   for (let index = 0; index < alpha.length; index += 1) {
@@ -24,12 +21,7 @@ export function cropResizePadCanvas(
   minimumBounds?: OpaqueBounds,
 ): OffscreenCanvas {
   const sourceContext = getContext(sourceCanvas)
-  const imageData = sourceContext.getImageData(
-    0,
-    0,
-    sourceCanvas.width,
-    sourceCanvas.height,
-  )
+  const imageData = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
   const opaqueBounds = findOpaqueBounds(
     extractAlphaChannel(imageData.data),
     sourceCanvas.width,
@@ -90,10 +82,7 @@ function mergeOpaqueBounds(
     right: Math.max(0, Math.min(width - 1, minimumBounds.right)),
     bottom: Math.max(0, Math.min(height - 1, minimumBounds.bottom)),
   }
-  if (
-    clampedMinimum.right < clampedMinimum.left ||
-    clampedMinimum.bottom < clampedMinimum.top
-  ) {
+  if (clampedMinimum.right < clampedMinimum.left || clampedMinimum.bottom < clampedMinimum.top) {
     return opaqueBounds
   }
   if (!opaqueBounds) return clampedMinimum
@@ -104,4 +93,34 @@ function mergeOpaqueBounds(
     right: Math.max(opaqueBounds.right, clampedMinimum.right),
     bottom: Math.max(opaqueBounds.bottom, clampedMinimum.bottom),
   }
+}
+
+export function findOpaqueBounds(
+  alpha: Uint8ClampedArray,
+  width: number,
+  height: number,
+): OpaqueBounds | null {
+  let left = width
+  let top = height
+  let right = -1
+  let bottom = -1
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (alpha[y * width + x] === 0) {
+        continue
+      }
+
+      left = Math.min(left, x)
+      top = Math.min(top, y)
+      right = Math.max(right, x)
+      bottom = Math.max(bottom, y)
+    }
+  }
+
+  if (right === -1) {
+    return null
+  }
+
+  return { left, top, right, bottom }
 }

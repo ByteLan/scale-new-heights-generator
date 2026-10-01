@@ -1,6 +1,12 @@
 export interface CanvasRuntime {
   createCanvas: (width: number, height: number) => OffscreenCanvas
   toPngBytes?: (canvas: OffscreenCanvas) => Promise<Uint8Array> | Uint8Array
+  /** 已自行注册字体的 runtime 可以省略。 */
+  registerFont?: (filePath: string, family: string) => boolean
+  /** 用于跳过重复的回退字体注册。 */
+  hasFont?: (family: string) => boolean
+  /** 需要 Iconify 图标时才使用，浏览器由主线程加载。 */
+  loadImage?: (source: Uint8Array | string) => Promise<ImageBitmap> | ImageBitmap
 }
 
 const browserRuntime: CanvasRuntime = {

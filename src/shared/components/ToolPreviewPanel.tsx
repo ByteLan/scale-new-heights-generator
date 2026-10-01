@@ -1,36 +1,22 @@
-import {
-  CanvasPreview,
-  PreviewActions,
-  type PreviewResult,
-} from './ImagePreview'
+import { CanvasPreview, PreviewActions } from './ImagePreview'
 import { SimpleEditFooter } from './SimpleEditFooter'
 import { ToolFooter } from './ToolFooter'
 import { UsageHintCarousel } from './UsageHintCarousel'
 import { useIntranetAvailable } from '../hooks/useIntranetAvailable'
 import type { Tool } from '../utils/tool'
 
-export type CopiedTarget = 'image' | 'link'
+import type { ComponentProps } from 'react'
 
-interface ToolPreviewPanelProps {
-  preview: PreviewResult | null
-  previewError: string | null
-  isRendering: boolean
-  isExporting: boolean
-  copied: CopiedTarget | null
-  hasText: boolean
-  shareUrl: string
-  editorUrl: string
-  simpleMode?: boolean
-  exportLabel: string
-  canCopyImage?: boolean
-  onCopyImage: () => void
-  onExport: () => void
-  onCopyLink: () => void
-  placeholder: string
-  switchTool: Tool
-  switchIcon: string
-  switchLabel: string
-}
+type ToolPreviewPanelProps =
+  Omit<ComponentProps<typeof CanvasPreview>, 'hasContent'> &
+  ComponentProps<typeof PreviewActions> & {
+    hasText: boolean
+    editorUrl: string
+    simpleMode?: boolean
+    switchTool: Tool
+    switchIcon: string
+    switchLabel: string
+  }
 
 export function ToolPreviewPanel({
   preview,
@@ -90,9 +76,7 @@ export function ToolPreviewPanel({
           onCopyLink={onCopyLink}
         />
       )}
-      {hasText && (
-        <UsageHintCarousel showIntranetHints={showIntranetContent} />
-      )}
+      {hasText && <UsageHintCarousel showIntranetHints={showIntranetContent} />}
       <ToolFooter
         tool={switchTool}
         icon={switchIcon}

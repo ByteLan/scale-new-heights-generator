@@ -1,3 +1,4 @@
+import type { AvatarEditor } from '../hooks/useAvatarEditor'
 import { useLayoutEffect, useRef } from 'react'
 import { AngleKnob } from '../../shared/components/AngleKnob'
 import { FieldLabel } from '../../shared/components/FieldLabel'
@@ -10,13 +11,7 @@ import { AVATAR_STYLES } from '../config/styles'
 import { AvatarAdvancedControls } from './control-panel/AvatarAdvancedControls'
 import { AvatarModeStylePicker } from './control-panel/AvatarModeStylePicker'
 
-interface AvatarControlsPanelProps {
-  controls: AvatarControls
-  updateControl: <K extends keyof AvatarControls>(
-    key: K,
-    value: AvatarControls[K],
-  ) => void
-}
+type AvatarControlsPanelProps = Pick<AvatarEditor, 'controls' | 'updateControl'>
 
 export function AvatarControlsPanel({
   controls,

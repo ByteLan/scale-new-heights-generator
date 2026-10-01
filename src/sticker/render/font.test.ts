@@ -94,7 +94,7 @@ describe('browser font sources', () => {
     await pending
     expect(fonts.add).toHaveBeenCalledTimes(1)
     expect(fonts.add).toHaveBeenCalledWith(instances[1])
-    expect(stickerFontDescriptor('snh').family).toBe('DouyinSansBold')
+    expect(stickerFontDescriptor('snh').family).toBe('DouyinSans-Local')
   })
 
   it('falls back locally if a CDN subset never finishes loading', async () => {

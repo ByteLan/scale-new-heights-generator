@@ -1,5 +1,10 @@
 allowBuilds:
   esbuild: true
+# 格式规则由 Oxlint 执行，无需自动安装 ESLint 引擎。
+autoInstallPeers: false
+peerDependencyRules:
+  ignoreMissing:
+    - eslint
 minimumReleaseAgeExclude:
   - '@types/node@26.1.1'
   - tsdown@0.22.4

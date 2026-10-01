@@ -1,14 +1,21 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "react",
-    "unicorn",
-    "typescript",
-    "oxc",
-    "import",
-    "vitest",
-    "jsx-a11y"
-  ],
+  "plugins": ["react", "unicorn", "typescript", "oxc", "import", "vitest", "jsx-a11y"],
+  "jsPlugins": ["@stylistic/eslint-plugin"],
+  "rules": {
+    "@stylistic/indent": ["error", 2, { "SwitchCase": 1, "offsetTernaryExpressions": true }],
+    "@stylistic/quotes": ["error", "single", { "avoidEscape": true, "allowTemplateLiterals": "avoidEscape" }],
+    "@stylistic/semi": ["error", "never"],
+    "@stylistic/comma-spacing": "error",
+    "@stylistic/object-curly-spacing": ["error", "always"],
+    "@stylistic/array-bracket-spacing": ["error", "never"],
+    "@stylistic/keyword-spacing": "error",
+    "@stylistic/space-infix-ops": "error",
+    "@stylistic/arrow-spacing": "error",
+    "@stylistic/type-annotation-spacing": "error",
+    "@stylistic/no-trailing-spaces": "error",
+    "@stylistic/eol-last": ["error", "always"]
+  },
   "options": {
     "denyWarnings": true
   }

@@ -1,3 +1,4 @@
+import { parseNumber } from '../shared/config/normalize'
 import { Buffer } from 'node:buffer'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -21,11 +22,9 @@ import {
   runtimeCanvasToPngBytes,
   setCanvasRuntime,
   type CanvasRuntime,
-} from './render/runtime'
-import {
-  normalizeTextRenderInput,
-  type TextRenderInput,
-} from '../shared/render/input'
+} from '../shared/render/runtime'
+import { createNapiCanvasRuntime as createSharedNapiCanvasRuntime } from '../shared/render/node'
+import { normalizeTextRenderInput, type TextRenderInput } from '../shared/render/input'
 import {
   ULTRA_HDR_JPEG_EXTENSION,
   ULTRA_HDR_JPEG_MIME,
@@ -37,11 +36,6 @@ import { iconIdToUrl } from './utils/iconLoader'
 export type StickerRenderInput = TextRenderInput<StickerControls>
 export type { StickerFlavor }
 
-/** PNG 输出的 MIME 类型 */
-const PNG_MIME = 'image/png'
-/** PNG 输出的下载扩展名 */
-const PNG_EXTENSION = 'png'
-
 /** 无头渲染的图片产物：字节流 + 内容类型 + 扩展名 */
 export interface StickerImageResult {
   buffer: Buffer
@@ -49,30 +43,9 @@ export interface StickerImageResult {
   extension: string
 }
 
-export interface StickerGeneratorRuntime extends CanvasRuntime {
-  /** 注册字体，自定义 runtime 如果已自行注册字体，可以不实现 */
-  registerFont?: (filePath: string, family: string) => boolean
-  /** 判断字体是否已注册，用于跳过重复 fallback 注册 */
-  hasFont?: (family: string) => boolean
-  /** 从 SVG bytes 或路径加载图片；仅在需要 Iconify 前缀图标时使用 */
-  loadImage?: (source: Buffer | Uint8Array | string) => Promise<ImageBitmap> | ImageBitmap
-}
+export type StickerGeneratorRuntime = CanvasRuntime
 
-interface NapiCanvasModule {
-  GlobalFonts: {
-    registerFromPath: (filePath: string, family: string) => unknown
-    has: (family: string) => boolean
-  }
-  createCanvas: (width: number, height: number) => unknown
-  loadImage: (source: Buffer | Uint8Array | string) => Promise<unknown>
-}
-
-export interface NodeStickerFontFiles
-  extends Partial<Record<EmojiSymbolFontKey, string>> {
-  snh?: string
-  bs?: string
-  inter?: string
-}
+export type NodeStickerFontFiles = Partial<Record<StickerFlavor | EmojiSymbolFontKey | 'inter', string>>
 
 export interface RenderStickerNodeOptions {
   /**
@@ -90,37 +63,10 @@ export interface RenderStickerNodeOptions {
 }
 
 const registeredFontPaths = new Set<string>()
-let defaultRuntimePromise: Promise<StickerGeneratorRuntime> | null = null
 let defaultGeneratorPromise: Promise<StickerGenerator> | null = null
 
-async function importNapiCanvas(): Promise<NapiCanvasModule> {
-  try {
-    return await import('@napi-rs/canvas') as NapiCanvasModule
-  } catch (cause) {
-    throw new Error(
-      'Node 无头渲染需要安装可选依赖 @napi-rs/canvas；或通过 new StickerGenerator(runtime) 传入自定义 canvas runtime。',
-      { cause },
-    )
-  }
-}
-
 export function createNapiCanvasRuntime(): Promise<StickerGeneratorRuntime> {
-  defaultRuntimePromise ??= importNapiCanvas().then((canvas) => ({
-    createCanvas: (width, height) =>
-      canvas.createCanvas(width, height) as OffscreenCanvas,
-    toPngBytes: (runtimeCanvas) => {
-      const buffer = (runtimeCanvas as unknown as {
-        toBuffer: (mime: string) => Buffer
-      }).toBuffer('image/png')
-      return new Uint8Array(buffer)
-    },
-    registerFont: (filePath, family) =>
-      Boolean(canvas.GlobalFonts.registerFromPath(filePath, family)),
-    hasFont: (family) => canvas.GlobalFonts.has(family),
-    loadImage: async (source) =>
-      await canvas.loadImage(source) as unknown as ImageBitmap,
-  }))
-  return defaultRuntimePromise
+  return createSharedNapiCanvasRuntime()
 }
 
 async function defaultGenerator(): Promise<StickerGenerator> {
@@ -128,10 +74,6 @@ async function defaultGenerator(): Promise<StickerGenerator> {
     (runtime) => new StickerGenerator(runtime),
   )
   return defaultGeneratorPromise
-}
-
-function normalizeRenderInput(input: StickerRenderInput): StickerControls {
-  return normalizeTextRenderInput(input, normalizeStickerControls)
 }
 
 function candidateFontUrls(fileName: string): URL[] {
@@ -143,17 +85,15 @@ function candidateFontUrls(fileName: string): URL[] {
 }
 
 function resolveBundledFontFile(fileName: string): string {
-  for (const url of candidateFontUrls(fileName)) {
-    const filePath = fileURLToPath(url)
-    if (existsSync(filePath)) return filePath
-  }
+  const filePath = findBundledFontFile(fileName)
+  if (filePath) return filePath
 
   throw new Error(
     `找不到字体文件 ${fileName}。请确认 npm 包包含 public 目录，或通过 fontFiles 显式传入字体路径。`,
   )
 }
 
-function resolveOptionalBundledFontFile(fileName: string): string {
+function findBundledFontFile(fileName: string): string {
   for (const url of candidateFontUrls(fileName)) {
     const filePath = fileURLToPath(url)
     if (existsSync(filePath)) return filePath
@@ -177,7 +117,7 @@ function resolveOptionalFontFile(
 ): string {
   if (explicitPath) return explicitPath
   if (bundledFile) {
-    const fontPath = resolveOptionalBundledFontFile(bundledFile)
+    const fontPath = findBundledFontFile(bundledFile)
     if (fontPath) return fontPath
   }
   return systemFile && existsSync(systemFile) ? systemFile : ''
@@ -203,11 +143,7 @@ function registerStickerFontsWithRuntime(
 
   // 西文字体：Inter Bold 拉丁子集。缺失时静默跳过，退回系统 sans-serif。
   const interPath = fontFiles.inter ?? resolveLatinFontFile()
-  if (
-    interPath &&
-    !registeredFontPaths.has(interPath) &&
-    !runtime.hasFont?.(LATIN_FONT_FAMILY)
-  ) {
+  if (interPath && !registeredFontPaths.has(interPath) && !runtime.hasFont?.(LATIN_FONT_FAMILY)) {
     if (runtime.registerFont(interPath, LATIN_FONT_FAMILY)) {
       registeredFontPaths.add(interPath)
     } else {
@@ -238,10 +174,7 @@ export async function registerStickerFonts(
   fontFiles: NodeStickerFontFiles = {},
   runtime?: StickerGeneratorRuntime,
 ): Promise<void> {
-  registerStickerFontsWithRuntime(
-    runtime ?? await createNapiCanvasRuntime(),
-    fontFiles,
-  )
+  registerStickerFontsWithRuntime(runtime ?? (await createNapiCanvasRuntime()), fontFiles)
 }
 
 async function loadNodeIconImage(
@@ -263,8 +196,7 @@ async function loadNodeIconImage(
   const svg = await response.text()
   if (!svg.includes('<svg')) return null
 
-  const colored =
-    duotone || /(?:fill|stop-color)\s*=\s*["']\s*(?:#|rgb\(|hsl\()/i.test(svg)
+  const colored = duotone || /(?:fill|stop-color)\s*=\s*["']\s*(?:#|rgb\(|hsl\()/i.test(svg)
   const bitmap = await runtime.loadImage(Buffer.from(svg))
   return { bitmap, colored }
 }
@@ -312,20 +244,19 @@ export class StickerGenerator {
   ): Promise<{ canvas: OffscreenCanvas; controls: StickerControls }> {
     this.registerFonts(options.fontFiles)
 
-    const controls = normalizeRenderInput(input)
+    const controls = normalizeTextRenderInput(input, normalizeStickerControls)
     const icon =
       options.loadIcon === false
         ? null
         : await loadNodeIconImage(
-          controls.icon,
-          this.runtime,
-          controls.envelope.colors[0] ?? '#ffffff',
-        )
+            controls.icon,
+            this.runtime,
+            controls.envelope.colors[0] ?? '#ffffff',
+          )
     const result = await renderSticker(controls, icon, {
       outputScale: normalizeRenderScale(options.outputScale),
-      antialiasScale: options.antialiasScale === undefined
-        ? undefined
-        : numberOption(options.antialiasScale),
+      antialiasScale:
+        options.antialiasScale === undefined ? undefined : parseNumber(options.antialiasScale),
       maxOutputEdge: options.maxOutputEdge,
     })
     return { canvas: result.canvas, controls }
@@ -363,15 +294,8 @@ export class StickerGenerator {
     const bytes = await runtimeCanvasToPngBytes(canvas)
     return {
       buffer: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-      mime: PNG_MIME,
-      extension: PNG_EXTENSION,
+      mime: 'image/png',
+      extension: 'png',
     }
   }
-}
-
-function numberOption(value: unknown): number | undefined {
-  const parsed = typeof value === 'string' ? Number(value.trim()) : value
-  return typeof parsed === 'number' && Number.isFinite(parsed)
-    ? parsed
-    : undefined
 }

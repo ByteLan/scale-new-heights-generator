@@ -1,4 +1,5 @@
-import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import type { StickerEditor } from '../../hooks/useStickerEditor'
+import { Fragment, useState, type CSSProperties } from 'react'
 import { Icon } from '@iconify/react'
 import { AngleKnob } from '../../../shared/components/AngleKnob'
 import { Button } from '../../../shared/ui/button'
@@ -6,8 +7,7 @@ import { Select } from '../../../shared/ui/select'
 import {
   defaultGradientAngle,
   STICKER_FLAVORS,
-  type StickerControls,
-  type StickerEnvelopeControls,
+  STICKER_DEFAULT_MERGE_GRADIENT,
 } from '../../config/defaults'
 import {
   STICKER_PRESET_GROUPS,
@@ -15,46 +15,31 @@ import {
   type StickerPreset,
 } from '../../config/presets'
 import { colorInputValue } from '../../utils/color'
-import { ensureStickerFontLoaded, installStickerFontSources, stickerFontDescriptor } from '../../render/font'
-import { loadStickerFontSources } from '../../worker/fontStylesheet'
-
-interface PresetInkBounds { height: number; top: number }
+import { ensureStickerFontLoaded, stickerFontDescriptor } from '../../render/font'
+import { withFontLoadTimeout } from '../../render/fontFace'
+import { loadStickerFontSources, stickerCdnFontFamily } from '../../worker/fontStylesheet'
 
 async function loadPresetFonts(): Promise<void> {
   await Promise.all(STICKER_FLAVORS.map(async (flavor) => {
-    installStickerFontSources(flavor, await loadStickerFontSources(flavor))
     const text = STICKER_PRESET_LIST.filter(preset => preset.flavor === flavor).map(preset => preset.text).join('')
+    const sources = await loadStickerFontSources(flavor)
+    if (sources) {
+      try {
+        await withFontLoadTimeout(document.fonts.load(`bold 16px "${stickerCdnFontFamily(flavor)}"`, text))
+        if (document.fonts.check(`bold 16px "${stickerCdnFontFamily(flavor)}"`, text)) return
+      } catch {
+        // CDN 字体失败或超时后才加载本地整库，不重复注册远程字体。
+      }
+    }
     await ensureStickerFontLoaded(flavor, text)
   }))
 }
 
-let presetMeasurementContext: CanvasRenderingContext2D | null = null
-
-function measurePresetInk(element: HTMLElement): PresetInkBounds | undefined {
-  presetMeasurementContext ??= document.createElement('canvas').getContext('2d')
-  if (!presetMeasurementContext) return
-  const style = getComputedStyle(element)
-  presetMeasurementContext.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
-  const metrics = presetMeasurementContext.measureText(element.textContent ?? '')
-  return {
-    height: metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent,
-    top: (parseFloat(style.lineHeight) - metrics.fontBoundingBoxAscent - metrics.fontBoundingBoxDescent) / 2
-      + metrics.fontBoundingBoxAscent - metrics.actualBoundingBoxAscent,
-  }
-}
-
-interface StickerPresetToolbarProps {
-  controls: StickerControls
-  updateEnvelope: <K extends keyof StickerEnvelopeControls>(
-    key: K,
-    value: StickerEnvelopeControls[K],
-  ) => void
-  randomizeColors: () => void
-  updateColorAt: (index: number, value: string) => void
-  addColor: (at?: number) => void
-  removeColor: (index: number) => void
-  applyPresetText: (value: string) => void
-}
+type StickerPresetToolbarProps = Pick<
+  StickerEditor,
+  'controls' | 'updateEnvelope' | 'randomizeColors' | 'updateColorAt' | 'addColor'
+  | 'removeColor' | 'applyPresetText'
+>
 
 export function StickerPresetToolbar({
   controls,
@@ -66,13 +51,13 @@ export function StickerPresetToolbar({
   applyPresetText,
 }: StickerPresetToolbarProps) {
   const [selectedPresetText, setSelectedPresetText] = useState('')
-  const [fontsReady, setFontsReady] = useState(false)
   const activePreset = STICKER_PRESET_LIST.find((p) => p.text === selectedPresetText)
   const presetDirty =
     activePreset !== undefined &&
     (controls.flavor !== activePreset.flavor ||
       controls.icon !== activePreset.icon ||
       controls.iconTilt !== activePreset.iconTilt ||
+      controls.mergeGradient !== STICKER_DEFAULT_MERGE_GRADIENT[activePreset.flavor] ||
       controls.envelope.gradientAngle !== activePreset.gradientAngle ||
       controls.envelope.outlineStrokeWidth !== activePreset.outlineStrokeWidth ||
       controls.envelope.colors.join(',') !== activePreset.colors.join(','))
@@ -87,13 +72,13 @@ export function StickerPresetToolbar({
           value={selectedPresetText}
           placeholder="选择预设文案…"
           onOpenChange={(open) => {
-            if (open) void loadPresetFonts().then(() => setFontsReady(true)).catch(() => undefined)
+            if (open) void loadPresetFonts().catch(() => undefined)
           }}
           groups={Object.entries(STICKER_PRESET_GROUPS).map(([group, presets]) => ({
             label: group,
             options: presets.map((preset) => ({
               value: preset.text,
-              label: <PresetOption preset={preset} fontsReady={fontsReady} />,
+              label: <PresetOption preset={preset} />,
             })),
           }))}
           onValueChange={(value) => {
@@ -168,7 +153,7 @@ export function StickerPresetToolbar({
         variant="secondary"
         size="icon"
         type="button"
-        title="随机同色系/邻色系配色"
+        title="随机单色、双色或三色配色"
         onClick={randomizeColors}
       >
         🎲
@@ -184,16 +169,9 @@ export function StickerPresetToolbar({
 
 function PresetOption({
   preset,
-  fontsReady,
 }: {
   preset: StickerPreset
-  fontsReady: boolean
 }) {
-  const textRef = useRef<HTMLSpanElement>(null)
-  const [ink, setInk] = useState<PresetInkBounds>()
-  useLayoutEffect(() => {
-    if (textRef.current) setInk(measurePresetInk(textRef.current))
-  }, [fontsReady, preset.text])
   return (
     <span
       className={`preset-option${preset.icon ? '' : ' preset-option-text-only'}`}
@@ -209,14 +187,11 @@ function PresetOption({
         />
       ) : null}
       <span
-        ref={textRef}
         className={`preset-option-text preset-option-text-${preset.flavor}`}
         style={{
-          fontFamily: `"${stickerFontDescriptor(preset.flavor).family}", sans-serif`,
-          ...(ink ? { backgroundSize: `100% ${ink.height}px`, backgroundPosition: `0 ${ink.top}px` } : {}),
+          fontFamily: `"${stickerCdnFontFamily(preset.flavor)}", "${stickerFontDescriptor(preset.flavor).localFamily}", sans-serif`,
         }}
       >{preset.text}</span>
-      <span className="preset-option-gradient" />
     </span>
   )
 }

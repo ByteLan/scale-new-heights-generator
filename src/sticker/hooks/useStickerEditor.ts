@@ -1,110 +1,39 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearch } from '@tanstack/react-router'
-import {
-  deriveDepthColor,
-  randomGradientPair,
-  randomVividColors,
-} from '../utils/color'
-import { generatedFileName } from '../../shared/utils/fileName'
-import { copyImageToClipboard } from '../../shared/utils/clipboard'
-import { saveToolSearch, searchRecordKey, toolUrl } from '../../shared/utils/tool'
-import { useRenderedPreview } from '../../shared/hooks/useRenderedPreview'
+import { deriveDepthColor } from '../utils/color'
+import { randomStickerColors } from '../utils/randomPalette'
+import { useToolEditor } from '../../shared/hooks/useToolEditor'
 import {
   cancelPendingPreviews,
   exportStickerBlob,
   renderStickerPreview,
 } from '../worker/stickerWorker'
 import {
-  DEFAULT_STICKER_CONTROLS,
   defaultGradientAngle,
   type StickerControls,
   type StickerEnvelopeControls,
   STICKER_DEFAULT_OUTLINE_WIDTH,
+  STICKER_DEFAULT_MERGE_GRADIENT,
   type StickerFlavor,
   type StickerPaddingControls,
 } from '../config/defaults'
 import { STICKER_PRESET_LIST, type StickerPreset } from '../config/presets'
 import { controlsToSearch, searchToControls } from '../config/searchParams'
 
-export type CopiedTarget = 'image' | 'link'
-
-/** 简易模式 URL 参数名 */
-const SIMPLE_MODE_PARAM = 'm'
-/** 简易模式 URL 参数值 */
-const SIMPLE_MODE_VALUE = 'simple'
-
-function buildStickerUrl(controls: StickerControls, simpleMode = false): string {
-  const search = controlsToSearch(controls)
-  if (simpleMode) search[SIMPLE_MODE_PARAM] = SIMPLE_MODE_VALUE
-  return toolUrl('sticker', search)
-}
-
 function hasStickerText(controls: StickerControls): boolean {
   return controls.text.length > 0
 }
 
 export function useStickerEditor() {
-  const search = useSearch({ from: '__root__' })
-  const navigate = useNavigate()
-  const isSimpleMode = search[SIMPLE_MODE_PARAM] === SIMPLE_MODE_VALUE
-  const currentSearchKey = useMemo(() => searchRecordKey(search), [search])
-  const lastWrittenSearchKey = useRef(currentSearchKey)
-
-  const [controls, setControls] = useState<StickerControls>(() =>
-    searchToControls(search),
-  )
-  const [isExporting, setIsExporting] = useState(false)
-  // 复制反馈：记录刚复制成功的按钮，短暂显示「已复制」。
-  const [copied, setCopied] = useState<CopiedTarget | null>(null)
-  const {
-    renderControls,
-    setRenderControls,
-    preview,
-    previewError,
-    setPreviewError,
-    isRendering,
-  } = useRenderedPreview({
-    controls,
+  const editor = useToolEditor({
+    tool: 'sticker',
+    fromSearch: searchToControls,
+    toSearch: controlsToSearch,
     delayMs: 250,
     hasContent: hasStickerText,
     render: renderStickerPreview,
     cancel: cancelPendingPreviews,
+    exportImage: exportStickerBlob,
   })
-
-  useEffect(() => {
-    saveToolSearch('sticker', controlsToSearch(controls))
-  }, [controls])
-
-  // URL query 发生外部变化（例如浏览器前进/后退）时，回灌到编辑状态。
-  useEffect(() => {
-    if (currentSearchKey === lastWrittenSearchKey.current) return
-
-    const nextControls = searchToControls(search)
-    setControls(nextControls)
-    setRenderControls(nextControls)
-    lastWrittenSearchKey.current = currentSearchKey
-  }, [currentSearchKey, search, setRenderControls])
-
-  // 同步控件 → URL query（用 replace，避免刷屏历史记录）。
-  useEffect(() => {
-    const nextSearch = controlsToSearch(renderControls)
-    if (isSimpleMode) nextSearch[SIMPLE_MODE_PARAM] = SIMPLE_MODE_VALUE
-    lastWrittenSearchKey.current = searchRecordKey(nextSearch)
-    void navigate({
-      to: '.',
-      search: () => nextSearch,
-      replace: true,
-    })
-  }, [renderControls, isSimpleMode, navigate])
-
-  const hasText = hasStickerText(controls)
-
-  const updateControl = <K extends keyof StickerControls>(
-    key: K,
-    value: StickerControls[K],
-  ) => {
-    setControls((c) => ({ ...c, [key]: value }))
-  }
+  const { setControls } = editor
 
   const updateEnvelope = <K extends keyof StickerEnvelopeControls>(
     key: K,
@@ -117,6 +46,7 @@ export function useStickerEditor() {
     setControls((c) => ({
       ...c,
       flavor,
+      mergeGradient: STICKER_DEFAULT_MERGE_GRADIENT[flavor],
       envelope: {
         ...c.envelope,
         outlineStrokeWidth: STICKER_DEFAULT_OUTLINE_WIDTH[flavor],
@@ -134,19 +64,11 @@ export function useStickerEditor() {
   const randomizeColors = () => {
     setControls((c) => ({
       ...c,
-      envelope: c.flavor === 'bs'
-        ? {
-            ...c.envelope,
-            colors: randomGradientPair(
-              c.envelope.colors[0] ?? '#76baf4',
-            ),
-            gradientAngle: defaultGradientAngle(c.icon),
-          }
-        : {
-            ...c.envelope,
-            colors: randomVividColors(c.envelope.colors[0] ?? '#76baf4'),
-            gradientAngle: defaultGradientAngle(c.icon),
-          },
+      envelope: {
+        ...c.envelope,
+        colors: randomStickerColors(c.envelope.colors[0] ?? '#76baf4', { flavor: c.flavor }),
+        gradientAngle: defaultGradientAngle(c.icon),
+      },
     }))
   }
 
@@ -182,15 +104,15 @@ export function useStickerEditor() {
     setControls((c) => ({
       ...c,
       text: preset.text,
-      flavor: preset.flavor ?? DEFAULT_STICKER_CONTROLS.flavor,
-      icon: preset.icon ?? DEFAULT_STICKER_CONTROLS.icon,
-      iconTilt: preset.iconTilt ?? DEFAULT_STICKER_CONTROLS.iconTilt,
+      flavor: preset.flavor,
+      icon: preset.icon,
+      iconTilt: preset.iconTilt,
+      mergeGradient: STICKER_DEFAULT_MERGE_GRADIENT[preset.flavor],
       shadow: { ...c.shadow, opacity: preset.shadowOpacity },
       envelope: {
         ...c.envelope,
         colors: preset.colors,
-        gradientAngle:
-          preset.gradientAngle ?? DEFAULT_STICKER_CONTROLS.envelope.gradientAngle,
+        gradientAngle: preset.gradientAngle,
         outlineStrokeWidth: preset.outlineStrokeWidth,
         edgeWidth: preset.edgeWidth,
         edgeOpacity: preset.edgeOpacity,
@@ -203,68 +125,8 @@ export function useStickerEditor() {
     if (preset) applyPreset(preset)
   }
 
-  const handleExport = async () => {
-    if (!hasText) return
-    setIsExporting(true)
-    try {
-      const result = await exportStickerBlob(controls)
-      const url = URL.createObjectURL(result.blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = generatedFileName('sticker', controls.text, result.extension)
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '导出失败。'
-      setPreviewError(message)
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const flashCopied = (which: CopiedTarget) => {
-    setCopied(which)
-    setTimeout(() => setCopied((prev) => (prev === which ? null : prev)), 1500)
-  }
-
-  const handleCopyImage = async () => {
-    if (!hasText) return
-    try {
-      const result = await exportStickerBlob(controls)
-      const copy = await copyImageToClipboard(result.blob, result.mime)
-      if (copy.ok) {
-        flashCopied('image')
-      } else {
-        setPreviewError(copy.message ?? '复制失败。')
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '复制失败。'
-      setPreviewError(message)
-    }
-  }
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(buildStickerUrl(controls, true))
-      flashCopied('link')
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '复制链接失败。'
-      setPreviewError(message)
-    }
-  }
-
   return {
-    controls,
-    preview,
-    previewError,
-    isExporting,
-    isRendering,
-    copied,
-    hasText,
-    isSimpleMode,
-    shareUrl: buildStickerUrl(controls, true),
-    editorUrl: buildStickerUrl(controls),
-    updateControl,
+    ...editor,
     updateFlavor,
     updateEnvelope,
     updatePadding,
@@ -273,9 +135,7 @@ export function useStickerEditor() {
     addColor,
     removeColor,
     applyPresetText,
-    handleExport,
-    handleCopyImage,
-    handleCopyLink,
-    exportLabel: controls.flash ? '导出 HDR 图' : '导出 PNG',
   }
 }
+
+export type StickerEditor = ReturnType<typeof useStickerEditor>

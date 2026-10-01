@@ -1,3 +1,4 @@
+import type { StickerEditor } from '../../hooks/useStickerEditor'
 import { Button } from '../../../shared/ui/button'
 import { FieldLabel } from '../../../shared/components/FieldLabel'
 import { DEFAULT_STICKER_CONTROLS, type StickerFlavor } from '../../config/defaults'
@@ -22,10 +23,7 @@ const STYLE_OPTIONS: {
   },
 ]
 
-interface StickerStyleFieldProps {
-  flavor: StickerFlavor
-  updateFlavor: (flavor: StickerFlavor) => void
-}
+type StickerStyleFieldProps = Pick<StickerEditor, 'updateFlavor'> & { flavor: StickerFlavor }
 
 export function StickerStyleField({
   flavor,

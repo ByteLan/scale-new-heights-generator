@@ -1,13 +1,8 @@
+import { splitGraphemes } from '../../shared/render/input'
 import { getContext, renderResultFromCanvas } from '../../shared/render/canvas'
-import {
-  normalizeTextRenderInput,
-  type TextRenderInput,
-} from '../../shared/render/input'
+import { normalizeTextRenderInput, type TextRenderInput } from '../../shared/render/input'
 import { createRuntimeCanvas } from '../../shared/render/runtime'
-import {
-  normalizeAvatarControls,
-  type AvatarControls,
-} from '../config/defaults'
+import { normalizeAvatarControls, type AvatarControls } from '../config/defaults'
 import { AVATAR_STYLES } from '../config/styles'
 
 interface AvatarLine {
@@ -38,9 +33,7 @@ const LINE_INK_HALF_HEIGHT_RATIO = 0.34
 /** 头像渲染使用的系统字体族 */
 const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif'
 
-export async function renderAvatar(
-  input: TextRenderInput<AvatarControls>,
-) {
+export async function renderAvatar(input: TextRenderInput<AvatarControls>) {
   const controls = normalizeTextRenderInput(input, normalizeAvatarControls)
   const text = controls.text
   if (!hasAvatarText(text)) {
@@ -88,10 +81,7 @@ function drawText(
   radius: number,
   paint: AvatarPaint,
 ): void {
-  const textRadius = Math.min(
-    radius,
-    radius * TEXT_RADIUS_RATIO * controls.fontScale,
-  )
+  const textRadius = Math.min(radius, radius * TEXT_RADIUS_RATIO * controls.fontScale)
   const layout = fitTextLayout(
     context,
     text,
@@ -126,12 +116,7 @@ function createAvatarPaint(
   const angle = ((controls.gradientAngle - 90) * Math.PI) / 180
   const dx = Math.cos(angle) * radius
   const dy = Math.sin(angle) * radius
-  const gradient = context.createLinearGradient(
-    center - dx,
-    center - dy,
-    center + dx,
-    center + dy,
-  )
+  const gradient = context.createLinearGradient(center - dx, center - dy, center + dx, center + dy)
   const style = AVATAR_STYLES[controls.style]
 
   style.stops.forEach((stop, index, list) => {
@@ -228,9 +213,7 @@ function manualLineTexts(text: string): string[] | null {
   const visibleLength = splitGraphemes(text.replace(/\s+/g, '')).length
   if (!hasLineBreak && visibleLength > 3) return null
 
-  return hasLineBreak
-    ? text.split(/\r\n|\r|\n/)
-    : [text]
+  return hasLineBreak ? text.split(/\r\n|\r|\n/) : [text]
 }
 
 function layoutManualLines(
@@ -245,9 +228,7 @@ function layoutManualLines(
     width: context.measureText(text).width,
   }))
 
-  return lines.every((line) => line.width <= lineLimit(radius, line.y, lineHeight))
-    ? lines
-    : null
+  return lines.every((line) => line.width <= lineLimit(radius, line.y, lineHeight)) ? lines : null
 }
 
 function chooseAutoLines(
@@ -325,10 +306,7 @@ function chordWidth(radius: number, y: number): number {
 
 function lineLimit(radius: number, y: number, lineHeight: number): number {
   const halfInk = lineHeight * LINE_INK_HALF_HEIGHT_RATIO
-  return Math.min(
-    chordWidth(radius, y - halfInk),
-    chordWidth(radius, y + halfInk),
-  )
+  return Math.min(chordWidth(radius, y - halfInk), chordWidth(radius, y + halfInk))
 }
 
 function textBlockCenterOffset(
@@ -340,8 +318,7 @@ function textBlockCenterOffset(
 
   for (const line of layout.lines) {
     const metrics = context.measureText(line.text)
-    const hasInkBounds =
-      metrics.actualBoundingBoxAscent > 0 || metrics.actualBoundingBoxDescent > 0
+    const hasInkBounds = metrics.actualBoundingBoxAscent > 0 || metrics.actualBoundingBoxDescent > 0
     const lineTop = hasInkBounds
       ? line.y - metrics.actualBoundingBoxAscent
       : line.y - layout.lineHeight / 2
@@ -366,12 +343,4 @@ function hasAvatarText(text: string): boolean {
 
 function normalizeLineBreaks(text: string): string {
   return text.replace(/\r\n|\r|\n/g, ' ')
-}
-
-function splitGraphemes(text: string): string[] {
-  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-    return Array.from(segmenter.segment(text), (segment) => segment.segment)
-  }
-  return Array.from(text)
 }

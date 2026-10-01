@@ -12,8 +12,10 @@ const TOOL = {
 
 export type Tool = keyof typeof TOOL
 
-export function toolUrl(tool: Tool, search: Record<string, string>): string {
-  const query = new URLSearchParams(search).toString()
+export function toolUrl(tool: Tool, search: Record<string, string>, simpleMode = false): string {
+  const params = new URLSearchParams(search)
+  if (simpleMode) params.set('m', 'simple')
+  const query = params.toString()
   return `${location.origin}${location.pathname}#${TOOL[tool].path}${query ? `?${query}` : ''}`
 }
 
@@ -21,7 +23,7 @@ export function saveToolSearch(tool: Tool, search: Record<string, string>): void
   try {
     globalThis.localStorage?.setItem(TOOL[tool].storageKey, JSON.stringify(search))
   } catch {
-    // URL state remains the source of truth.
+    // 本地缓存不可用时，仍可从 URL 恢复状态。
   }
 }
 
@@ -43,8 +45,7 @@ export function loadToolSearch(tool: Tool): Record<string, string> {
 }
 
 export function searchRecordKey(search: Record<string, string>): string {
-  return Object.entries(search)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}=${value}`)
-    .join('&')
+  return new URLSearchParams(
+    Object.entries(search).sort(([left], [right]) => left.localeCompare(right)),
+  ).toString()
 }

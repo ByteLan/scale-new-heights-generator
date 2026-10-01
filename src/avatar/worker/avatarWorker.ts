@@ -1,28 +1,22 @@
 import type { AvatarControls } from '../config/defaults'
-import type { AvatarWorkerResponse } from '../config/workerProtocol'
-import { createImageWorkerClient } from '../../shared/worker/imageWorker'
-import type {
-  ImageFileResult,
-  PreviewResult,
-} from '../../shared/components/ImagePreview'
+import {
+  createImageWorkerClient,
+} from '../../shared/worker/imageWorker'
 
-const client = createImageWorkerClient<AvatarWorkerResponse>(() =>
-  new Worker(
-    new URL('./renderAvatar.worker.ts', import.meta.url),
-    { type: 'module' },
-  ),
+const client = createImageWorkerClient(
+  () => new Worker(new URL('./renderAvatar.worker.ts', import.meta.url), { type: 'module' }),
 )
 
-export function renderAvatarPreview(controls: AvatarControls): Promise<PreviewResult> {
-  return client.request<PreviewResult>((worker, id) => {
+export function renderAvatarPreview(controls: AvatarControls) {
+  return client.request('render', (worker, id) => {
     worker.postMessage({ type: 'render', id, controls })
   })
 }
 
-export function exportAvatarBlob(controls: AvatarControls): Promise<ImageFileResult> {
-  return client.request<ImageFileResult>((worker, id) => {
+export function exportAvatarBlob(controls: AvatarControls) {
+  return client.request('export', (worker, id) => {
     worker.postMessage({ type: 'export', id, controls })
-  }, 'export')
+  })
 }
 
 export function cancelPendingAvatarPreviews(): void {

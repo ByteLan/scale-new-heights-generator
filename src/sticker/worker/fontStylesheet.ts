@@ -11,10 +11,12 @@ const FONT_STYLESHEETS: Record<StickerFlavor, FontStylesheet> = {
   snh: {
     url: 'https://fonts.bytedance.com/dfd/api/v1/css?family=DOUYINSANSBOLD-GB&display=swap',
     family: 'DOUYINSANSBOLD-GB',
+    retain: true,
   },
   bs: {
     url: 'https://cn-font.claude-code-best.win/packages/ysbth/dist/优设标题黑/result.css',
     family: 'YouSheBiaoTiHei',
+    retain: true,
   },
 }
 
@@ -25,12 +27,13 @@ export function loadInterFontSources(): Promise<FontFaceSource[] | undefined> {
   return loadStylesheet(INTER_STYLESHEET)
 }
 
-/** Read declarations with native CSSOM, then send them to the worker.
- * Some font CDNs accept stylesheet requests but reject fetch() requests.
- * These families are used only on the worker canvas, not in the page DOM.
- */
+/** 页面保留 CDN CSS；用 CSSOM 读取同一份来源，供 Worker 独立注册字体。 */
 export function loadStickerFontSources(flavor: StickerFlavor): Promise<FontFaceSource[] | undefined> {
   return loadStylesheet(FONT_STYLESHEETS[flavor])
+}
+
+export function stickerCdnFontFamily(flavor: StickerFlavor): string {
+  return FONT_STYLESHEETS[flavor].family
 }
 
 function loadStylesheet(stylesheet: FontStylesheet): Promise<FontFaceSource[] | undefined> {

@@ -9,7 +9,6 @@ import type {
 import {
   AVATAR_STYLES,
   AVATAR_STYLE_LIST,
-  type AvatarStyle,
   type AvatarStylePreset,
 } from '../../config/styles'
 
@@ -90,7 +89,7 @@ export function AvatarModeStylePicker({
             }}
             onValueChange={(value) => {
               onModeChange(option.id)
-              onStyleChange(value as AvatarStyle)
+              onStyleChange(value)
             }}
           />
         </div>

@@ -1,10 +1,7 @@
 import { stickerOutputSize } from './outputSize'
-import { renderResultFromCanvas } from '../../shared/render/canvas'
+import { getContext, renderResultFromCanvas } from '../../shared/render/canvas'
 import { outputAwareRasterScale, scaleBounds, scaleLayout } from './rasterScale'
-import {
-  normalizeRenderScale,
-  type StickerControls,
-} from '../config/defaults'
+import { normalizeRenderScale, type StickerControls } from '../config/defaults'
 import { darken, deriveByteStyleColors, resolveGradientStops } from '../utils/color'
 import {
   ensureStickerFontLoaded,
@@ -13,30 +10,15 @@ import {
   isChineseDominant,
   measureGlyphWithCanvas,
 } from './font'
-import {
-  createStickerLayout,
-  isEmojiGrapheme,
-  mergeBounds,
-} from './layout'
-import {
-  cropResizePadCanvas,
-  getContext,
-} from './canvas'
-import {
-  createGradient,
-} from './gradient'
-import {
-  dilateCanvasOutwardRound,
-  erodeCanvasInward,
-  fillEnclosedRegionsCanvas,
-  gradientExtentFromCanvas,
-} from './paint'
-import { createRuntimeCanvas } from './runtime'
+import { createStickerLayout, isEmojiGrapheme, mergeBounds } from './layout'
+import { cropResizePadCanvas } from './canvas'
+import { createGradient, gradientExtentFromCanvas } from './gradient'
+import { dilateCanvasOutwardRound, erodeCanvasInward, fillEnclosedRegionsCanvas } from './paint'
+import { createRuntimeCanvas } from '../../shared/render/runtime'
 import {
   configureTextContext,
   computeIconBox,
   buildGlyphTileCache,
-  drawColorEmoji,
   drawEmojiGlyphs,
   drawGlyphsFromTiles,
   drawIcon,
@@ -102,7 +84,12 @@ export async function renderSticker(
     measureGlyph: (grapheme, fontSize) => {
       let measurement = measurements.get(grapheme)
       if (!measurement) {
-        measurement = measureGlyphWithCanvas(grapheme, fontSize, renderControls.flavor, chineseDominant)
+        measurement = measureGlyphWithCanvas(
+          grapheme,
+          fontSize,
+          renderControls.flavor,
+          chineseDominant,
+        )
         measurements.set(grapheme, measurement)
       }
       return measurement
@@ -110,16 +97,9 @@ export async function renderSticker(
   })
 
   let iconBox = iconBitmap
-    ? computeIconBox(
-      iconBitmap,
-      layout,
-      renderControls.fontSize,
-      iconGlyphTransform,
-    )
+    ? computeIconBox(iconBitmap, layout, renderControls.fontSize, iconGlyphTransform)
     : null
-  let contentBounds = iconBox
-    ? mergeBounds(layout.bounds, iconBox)
-    : layout.bounds
+  let contentBounds = iconBox ? mergeBounds(layout.bounds, iconBox) : layout.bounds
 
   const outputScale = normalizeRenderScale(options.outputScale)
   const outputSize = stickerOutputSize(
@@ -152,10 +132,7 @@ export async function renderSticker(
   }
 
   const padding = calculateWorkingPadding(renderControls)
-  const workingWidth = Math.max(
-    1,
-    Math.ceil(contentBounds.maxX - contentBounds.minX + padding * 2),
-  )
+  const workingWidth = Math.max(1, Math.ceil(contentBounds.maxX - contentBounds.minX + padding * 2))
   const workingHeight = Math.max(
     1,
     Math.ceil(contentBounds.maxY - contentBounds.minY + padding * 2),
@@ -167,7 +144,7 @@ export async function renderSticker(
   const outputContext = getContext(outputCanvas)
 
   // 把用户颜色规整为实际停靠点（单色自动补出同色系深色，方向由角度旋钮控制）。
-  const gradientStops = resolveGradientStops(renderControls.envelope.colors)
+  const gradientStops = resolveGradientStops(renderControls.envelope.colors, renderControls.flavor)
 
   // ---------- Glyph Tile Cache: pre-render each unique glyph once ----------
   // This is the key web optimization: avoids repeated strokeText/fillText calls.
@@ -191,41 +168,39 @@ export async function renderSticker(
       context.lineCap = 'round'
       context.miterLimit = 2
       configureTextContext(context, renderControls.fontSize, renderControls.flavor)
-      drawPlacedGlyphs(context, layout, ox, oy, (ctx, grapheme) => {
-        ctx.strokeText(grapheme, 0, 0)
-        ctx.fillText(grapheme, 0, 0)
-      }, isTextPlacement)
+      drawPlacedGlyphs(
+        context,
+        layout,
+        ox,
+        oy,
+        (ctx, grapheme) => {
+          ctx.strokeText(grapheme, 0, 0)
+          ctx.fillText(grapheme, 0, 0)
+        },
+        isTextPlacement,
+      )
       // emoji for non-cached lineWidths still needs shape contribution
       if (layout.placements.some((p) => isEmojiGrapheme(p.grapheme))) {
         drawEmojiGlyphs(context, layout, renderControls.fontSize, renderControls.flavor, ox, oy)
       }
     }
-    // draw icon shape with the same outward expansion as text stroke
-    if (iconBitmap && iconBox) {
-      drawIconShape(context, lineWidth, ox, oy)
-    }
   }
 
   // Helper: draw text glyphs fill-only (uses cached fill tiles)
-  const drawFillOnly = (
-    context: OffscreenCanvasRenderingContext2D,
-    ox = originX,
-    oy = originY,
-  ) => {
+  const drawFillOnly = (context: OffscreenCanvasRenderingContext2D, ox = originX, oy = originY) => {
     drawGlyphsFromTiles(context, layout, fillTiles, ox, oy)
     if (iconBitmap && iconBox) {
       drawIcon(context, iconBitmap, iconBox, ox, oy, iconGlyphTransform)
     }
   }
 
-  // Helper: create a solid filled shape canvas (stroke+fill+fillEnclosed)
-  const createSolidShapeCanvas = (lineWidth: number): OffscreenCanvas => {
+  // 文字描边蒙版；封闭区域在与图标合并后统一填充，保持原有轮廓。
+  const createTextOutlineCanvas = (lineWidth: number): OffscreenCanvas => {
     const canvas = createRuntimeCanvas(workingWidth, workingHeight)
     const ctx = getContext(canvas)
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = '#ffffff'
     drawStrokeAndFill(ctx, lineWidth)
-    fillEnclosedRegionsCanvas(canvas)
     return canvas
   }
 
@@ -242,38 +217,53 @@ export async function renderSticker(
     }
 
     const iconCanvas = createRuntimeCanvas(workingWidth, workingHeight)
-    drawIcon(
-      getContext(iconCanvas),
-      iconBitmap,
-      iconBox,
-      ox,
-      oy,
-      iconGlyphTransform,
-    )
+    drawIcon(getContext(iconCanvas), iconBitmap, iconBox, ox, oy, iconGlyphTransform)
     dilateCanvasOutwardRound(iconCanvas, lineWidth / 2)
     context.drawImage(iconCanvas, 0, 0)
+  }
+
+  // 文字始终共用一段渐变；图标按合并设置取色。描边和字面复用同一区域。
+  const textOutlineCanvas = createTextOutlineCanvas(primaryStrokeWidth)
+  const iconOutlineCanvas = iconBitmap && iconBox && !controls.mergeGradient
+    ? createRuntimeCanvas(workingWidth, workingHeight)
+    : null
+  let outlineCanvas = textOutlineCanvas
+  if (iconOutlineCanvas) {
+    drawIconShape(getContext(iconOutlineCanvas), primaryStrokeWidth)
+    fillEnclosedRegionsCanvas(iconOutlineCanvas)
+    outlineCanvas = cloneCanvas(textOutlineCanvas)
+    getContext(outlineCanvas).drawImage(iconOutlineCanvas, 0, 0)
+  } else if (iconBitmap && iconBox) {
+    drawIconShape(getContext(outlineCanvas), primaryStrokeWidth)
+  }
+  fillEnclosedRegionsCanvas(outlineCanvas)
+  const gradientAngle = renderControls.envelope.gradientAngle
+  const textGradientExtent = gradientExtentFromCanvas(
+    controls.mergeGradient ? outlineCanvas : textOutlineCanvas,
+    gradientAngle,
+  )
+  const iconGradientExtent = iconOutlineCanvas && !controls.mergeGradient
+    ? gradientExtentFromCanvas(iconOutlineCanvas, gradientAngle)
+    : null
+  const fillGradient = (canvas: OffscreenCanvas, stops: string[]) => {
+    fillSourceInGradient(canvas, gradientAngle, stops, textGradientExtent)
+    if (iconOutlineCanvas && iconGradientExtent) {
+      const iconGradientCanvas = cloneCanvas(iconOutlineCanvas)
+      fillSourceInGradient(iconGradientCanvas, gradientAngle, stops, iconGradientExtent)
+      // 只替换已有图层上的颜色，保持字面、边缘环和抗锯齿的透明度不变。
+      compositeCanvas(getContext(canvas), iconGradientCanvas, 1, 'source-atop')
+    }
   }
 
   if (renderControls.flavor === 'snh') {
     // 白色字形置于彩色包体内并带较深的边缘轮廓，另在字形下方叠加 multiply 混合
     // 阴影，使白字读起来像是浮在彩色主体之上（匹配源表情包）。
-    const bandWidth = renderControls.envelope.outlineStrokeWidth
-
     // Build the solid white envelope shape once — reused by all layers
-    const envelopeWhiteCanvas = createSolidShapeCanvas(bandWidth * 2)
-    const envelopeGradientExtent = gradientExtentFromCanvas(
-      envelopeWhiteCanvas,
-      renderControls.envelope.gradientAngle,
-    )
+    const envelopeWhiteCanvas = outlineCanvas
 
     // Layer 1: Envelope — dilated outline filled with gradient
     const envelopeCanvas = cloneCanvas(envelopeWhiteCanvas)
-    fillSourceInGradient(
-      envelopeCanvas,
-      renderControls.envelope.gradientAngle,
-      gradientStops,
-      envelopeGradientExtent,
-    )
+    fillGradient(envelopeCanvas, gradientStops)
     compositeCanvas(outputContext, envelopeCanvas)
 
     // Layer 2: Edge band — darkened ring between outer and inner boundary
@@ -287,12 +277,7 @@ export async function renderSticker(
       edgeCtx.globalCompositeOperation = 'destination-out'
       edgeCtx.drawImage(erodedCanvas, 0, 0)
       // Color the edge ring with darkened gradient
-      fillSourceInGradient(
-        edgeCanvas,
-        renderControls.envelope.gradientAngle,
-        gradientStops.map((color) => darken(color, 0.45)),
-        envelopeGradientExtent,
-      )
+      fillGradient(edgeCanvas, gradientStops.map((color) => darken(color, 0.45)))
       // Composite edge onto output with multiply blend
       compositeCanvas(outputContext, edgeCanvas, renderControls.envelope.edgeOpacity, 'multiply')
     }
@@ -305,13 +290,17 @@ export async function renderSticker(
       shadowCtx.fillStyle = renderControls.shadow.color
       shadowCtx.filter = `blur(${renderControls.shadow.blur}px)`
       drawGlyphsFromTiles(
-        shadowCtx, layout, fillTiles,
+        shadowCtx,
+        layout,
+        fillTiles,
         originX + renderControls.shadow.offsetX,
         originY + renderControls.shadow.offsetY,
       )
       if (iconBitmap && iconBox) {
         drawIcon(
-          shadowCtx, iconBitmap, iconBox,
+          shadowCtx,
+          iconBitmap,
+          iconBox,
           originX + renderControls.shadow.offsetX,
           originY + renderControls.shadow.offsetY,
           iconGlyphTransform,
@@ -332,26 +321,14 @@ export async function renderSticker(
     drawFillOnly(glyphCtx)
     fillSourceInColor(glyphCanvas, '#ffffff')
     compositeCanvas(outputContext, glyphCanvas)
-
   } else {
     // 彩色字形直接由加深的同色系外层带包裹——没有白色描边。外扩部分就是加深后的颜色本身。
-    const rimWidth = renderControls.envelope.outlineStrokeWidth
-
     const { outline: byteOutlineStops, foreground: byteForegroundStops } =
       deriveByteStyleColors(gradientStops)
 
     // Layer 1: Deep outline — darkened gradient fill
-    const deepCanvas = createSolidShapeCanvas(rimWidth * 2)
-    const deepGradientExtent = gradientExtentFromCanvas(
-      deepCanvas,
-      renderControls.envelope.gradientAngle,
-    )
-    fillSourceInGradient(
-      deepCanvas,
-      renderControls.envelope.gradientAngle,
-      byteOutlineStops,
-      deepGradientExtent,
-    )
+    const deepCanvas = outlineCanvas
+    fillGradient(deepCanvas, byteOutlineStops)
     compositeCanvas(outputContext, deepCanvas)
 
     // Layer 2: Glyph fill — foreground gradient
@@ -359,17 +336,12 @@ export async function renderSticker(
     const glyphCtx = getContext(glyphCanvas)
     glyphCtx.fillStyle = '#ffffff'
     drawFillOnly(glyphCtx)
-    fillSourceInGradient(
-      glyphCanvas,
-      renderControls.envelope.gradientAngle,
-      byteForegroundStops,
-      deepGradientExtent,
-    )
+    fillGradient(glyphCanvas, byteForegroundStops)
     compositeCanvas(outputContext, glyphCanvas)
   }
 
   // Emoji 以原生彩色叠加在最上层（不参与蒙版着色，保留其真实配色）。
-  drawColorEmoji(
+  drawEmojiGlyphs(
     outputContext,
     layout,
     renderControls.fontSize,
@@ -381,14 +353,7 @@ export async function renderSticker(
   // 多色 / duotone 图标：剪影已折进蒙版拿到外描边包围带，此处再以原生颜色叠加在
   // 最上层，覆盖掉被统一重着色的白/渐变填充，保留图标自身配色。
   if (iconColored && iconBitmap && iconBox) {
-    drawIcon(
-      outputContext,
-      iconBitmap,
-      iconBox,
-      originX,
-      originY,
-      iconGlyphTransform,
-    )
+    drawIcon(outputContext, iconBitmap, iconBox, originX, originY, iconGlyphTransform)
   }
 
   // 固定成品字号优先；outputSize 只在尺寸预算不足时缩小整段文字。
@@ -464,10 +429,7 @@ function compositeCanvas(
   target.restore()
 }
 
-function scaleControlsForRasterization(
-  controls: StickerControls,
-  scale: number,
-): StickerControls {
+function scaleControlsForRasterization(controls: StickerControls, scale: number): StickerControls {
   if (scale === 1) return controls
 
   return {
@@ -496,9 +458,6 @@ function calculateWorkingPadding(controls: StickerControls): number {
       controls.envelope.edgeWidth * 2 +
       Math.abs(controls.alternatingOffset) +
       controls.shadow.blur * 2 +
-      Math.max(
-        Math.abs(controls.shadow.offsetX),
-        Math.abs(controls.shadow.offsetY),
-      ),
+      Math.max(Math.abs(controls.shadow.offsetX), Math.abs(controls.shadow.offsetY)),
   )
 }

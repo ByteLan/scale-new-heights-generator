@@ -23,14 +23,14 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm build` 构建网页和 npm 包；`pnpm test`、`pnpm lint` 检查代码。
+`pnpm build` 构建网页和 npm 包；`pnpm test`、`pnpm lint` 检查代码。`pnpm format` 修复基础格式，保留手工换行；`pnpm format:check` 与 `pnpm lint` 使用同一套规则。
 
 ## 在 Node 中使用
 
 npm 包名为 `@syru/byted-sticker-generator`，需要 Node 24+。
 
 ```bash
-npm install @syru/byted-sticker-generator@^1.0.0
+npm install @syru/byted-sticker-generator@^1.0.1
 ```
 
 ```ts
@@ -49,6 +49,6 @@ const png = await renderStickerToBuffer({
 
 ## 说明
 
-预设图标来自 [Iconify](https://iconify.design/)。贴纸字体使用抖音美好体、优设标题黑和 Inter；字体来源与加载方式见技术实现文档。
+预设图标通过 [Iconify](https://iconify.design/) 加载。Font Awesome（Dave Gandy）、Streamline、Solar（480 Design）采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)，火炬来自 [Game Icons](https://github.com/game-icons/icons)（[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)）。完整图标来源和字体加载方式见 [技术实现文档](https://github.com/zhousiru/scale-new-heights-generator/blob/main/docs/technical-implementation.md#图标来源)。
 
 内置预设文案仅供效果演示，与相关企业无官方关联。

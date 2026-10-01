@@ -2,34 +2,22 @@ export interface AvatarColorStop {
   srgb: string
 }
 
-export interface AvatarStylePreset {
-  id: AvatarStyle
+interface AvatarStyleAppearance {
   label: string
   stops: [AvatarColorStop, AvatarColorStop]
   solid: string
   gradientAngle?: number
 }
 
-export type AvatarStyle =
-  | 'aurora'
-  | 'deepBlue'
-  | 'violet'
-  | 'mint'
-  | 'gray'
-  | 'magenta'
-  | 'olive'
-  | 'purplePink'
-  | 'sunset'
-  | 'ocean'
-  | 'grape'
-  | 'lime'
-  | 'orange'
-  | 'rose'
+function defineStyles<K extends string>(styles: Record<K, AvatarStyleAppearance>) {
+  return Object.fromEntries(
+    Object.entries<AvatarStyleAppearance>(styles).map(([id, style]) => [id, { id, ...style }]),
+  ) as Record<K, AvatarStyleAppearance & { id: K }>
+}
 
 /** 头像样式预设表 */
-export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
+export const AVATAR_STYLES = defineStyles({
   aurora: {
-    id: 'aurora',
     label: '蓝色',
     stops: [
       { srgb: '#4180FF' },
@@ -38,7 +26,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#3174F6',
   },
   deepBlue: {
-    id: 'deepBlue',
     label: '深蓝',
     stops: [
       { srgb: '#427CFE' },
@@ -47,7 +34,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#2E6EF3',
   },
   violet: {
-    id: 'violet',
     label: '紫色',
     stops: [
       { srgb: '#935AF5' },
@@ -57,7 +43,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     gradientAngle: 180,
   },
   mint: {
-    id: 'mint',
     label: '薄荷',
     stops: [
       { srgb: '#0FDBBE' },
@@ -67,7 +52,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     gradientAngle: 180,
   },
   gray: {
-    id: 'gray',
     label: '灰色',
     stops: [
       { srgb: '#A8AFBA' },
@@ -77,7 +61,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     gradientAngle: 180,
   },
   magenta: {
-    id: 'magenta',
     label: '粉紫',
     stops: [
       { srgb: '#BF40C3' },
@@ -86,7 +69,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#B93DBD',
   },
   olive: {
-    id: 'olive',
     label: '绿黄',
     stops: [
       { srgb: '#2A8930' },
@@ -95,7 +77,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#2F8D35',
   },
   purplePink: {
-    id: 'purplePink',
     label: '紫粉',
     stops: [
       { srgb: '#9054F1' },
@@ -104,7 +85,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#8A4CE8',
   },
   sunset: {
-    id: 'sunset',
     label: '红橙',
     stops: [
       { srgb: '#F44F47' },
@@ -113,7 +93,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#F2534C',
   },
   ocean: {
-    id: 'ocean',
     label: '蓝绿',
     stops: [
       { srgb: '#356FF4' },
@@ -122,7 +101,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#139AC2',
   },
   grape: {
-    id: 'grape',
     label: '靛青',
     stops: [
       { srgb: '#5F66F4' },
@@ -131,7 +109,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#5E63EE',
   },
   lime: {
-    id: 'lime',
     label: '绿青',
     stops: [
       { srgb: '#298A35' },
@@ -140,7 +117,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#218F35',
   },
   orange: {
-    id: 'orange',
     label: '暖橙',
     stops: [
       { srgb: '#FEA033' },
@@ -149,7 +125,6 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     solid: '#F57B0C',
   },
   rose: {
-    id: 'rose',
     label: '红粉',
     stops: [
       { srgb: '#E43029' },
@@ -157,6 +132,12 @@ export const AVATAR_STYLES: Record<AvatarStyle, AvatarStylePreset> = {
     ],
     solid: '#D63898',
   },
+})
+
+export type AvatarStyle = keyof typeof AVATAR_STYLES
+
+export interface AvatarStylePreset extends AvatarStyleAppearance {
+  id: AvatarStyle
 }
 
 /** 头像样式预设列表 */

@@ -1,10 +1,7 @@
+import { splitGraphemes } from '../../shared/render/input'
 import type { StickerFlavor } from '../config/defaults'
 import { isChineseDominant } from './font'
-import {
-  isCjkGrapheme,
-  isWesternWordGrapheme,
-  isWordSymbolGrapheme,
-} from './characters'
+import { isCjkGrapheme, isWesternWordGrapheme, isWordSymbolGrapheme } from './characters'
 import {
   IDENTITY_GLYPH_TRANSFORM,
   type Bounds,
@@ -13,15 +10,6 @@ import {
   type GlyphTransform,
   type StickerLayout,
 } from './types'
-
-export function splitGraphemes(text: string): string[] {
-  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-    const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'grapheme' })
-    return Array.from(segmenter.segment(text), ({ segment }) => segment)
-  }
-
-  return Array.from(text)
-}
 
 export function getAlternatingOffset(index: number, amplitude: number): number {
   return index % 2 === 0 ? -amplitude : amplitude
@@ -48,10 +36,7 @@ export function classifyGrapheme(grapheme: string): GraphemeKind {
   return 'other'
 }
 
-export function measureSkewedGlyphBounds(
-  measurement: GlyphMeasurement,
-  skewDeg: number,
-): Bounds {
+export function measureSkewedGlyphBounds(measurement: GlyphMeasurement, skewDeg: number): Bounds {
   const skewTangent = Math.tan((skewDeg * Math.PI) / 180)
   const corners = [
     { x: -measurement.left, y: -measurement.ascent },
@@ -93,9 +78,7 @@ export function createStickerLayout(
   const verticalSkewDeg = glyphTransform.skewDeg[1]
   const lines = text.split('\n')
   const lineSpacing = options.fontSize * (options.lineHeight ?? 1.1)
-  const laidLines = lines.map((line) =>
-    layoutLine(line, { ...options, verticalSkewDeg }),
-  )
+  const laidLines = lines.map((line) => layoutLine(line, { ...options, verticalSkewDeg }))
 
   const lineWidths = laidLines.map((line) =>
     line.bounds ? line.bounds.maxX - line.bounds.minX : 0,
@@ -207,8 +190,7 @@ function layoutLine(
     // 这样整个英文单词共享一条连续倾斜的基线，绘制时逐字形的垂直斜切便自然首尾相接，
     // 消除了原先每个字母各自以自身锚点倾斜导致的参差。
     const wordTiltY = canSkew ? verticalSkewTangent * unitOffsetX : 0
-    const baselineY =
-      getAlternatingOffset(unitIndex, options.alternatingOffset) + wordTiltY
+    const baselineY = getAlternatingOffset(unitIndex, options.alternatingOffset) + wordTiltY
     const placementBounds = offsetBounds(skewedBounds, cursorX, baselineY)
 
     placements.push({
@@ -237,7 +219,7 @@ export function mergeBounds(left: Bounds, right: Bounds): Bounds {
   }
 }
 
-export function offsetBounds(bounds: Bounds, offsetX: number, offsetY: number): Bounds {
+function offsetBounds(bounds: Bounds, offsetX: number, offsetY: number): Bounds {
   return {
     minX: bounds.minX + offsetX,
     minY: bounds.minY + offsetY,
@@ -246,7 +228,7 @@ export function offsetBounds(bounds: Bounds, offsetX: number, offsetY: number): 
   }
 }
 
-export function emptyBounds(): Bounds {
+function emptyBounds(): Bounds {
   return {
     minX: 0,
     minY: 0,
