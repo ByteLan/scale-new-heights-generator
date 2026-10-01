@@ -38,7 +38,7 @@ export function AngleKnob({
 }: AngleKnobProps) {
   const wrapRef = useRef<HTMLButtonElement | null>(null)
   const knobRef = useRef<SVGSVGElement | null>(null)
-  const normalizedValue = signed ? signedToCircular(value) : normalizeAngle(value)
+  const normalizedValue = normalizeAngle(value)
   const displayValue = signed ? circularToSigned(normalizedValue) : normalizedValue
 
   const changeBy = (delta: number) => {
@@ -157,8 +157,4 @@ function normalizeAngle(value: number): number {
 function circularToSigned(value: number): number {
   const angle = normalizeAngle(value)
   return angle > 180 ? angle - 360 : angle
-}
-
-function signedToCircular(value: number): number {
-  return normalizeAngle(value)
 }

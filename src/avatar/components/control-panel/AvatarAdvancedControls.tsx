@@ -1,7 +1,7 @@
+import type { AvatarEditor } from '../../hooks/useAvatarEditor'
 import { AdvancedSection } from '../../../shared/components/AdvancedSection'
 import { HdrControls } from '../../../shared/components/HdrControls'
 import { SliderField } from '../../../shared/components/SliderField'
-import { hasChangedFields } from '../../../shared/utils/controlsDiff'
 import {
   DEFAULT_AVATAR_CONTROLS,
   AVATAR_FONT_SCALE_MAX,
@@ -13,36 +13,19 @@ import {
   AVATAR_LINE_HEIGHT_MIN,
   AVATAR_SIZE_MAX,
   AVATAR_SIZE_MIN,
-  type AvatarControls,
 } from '../../config/defaults'
 
-// 高级面板关注的字段：任一偏离默认值就默认展开。新增字段只加一行访问器。
-const ADVANCED_FIELDS: ReadonlyArray<(c: AvatarControls) => unknown> = [
-  (c) => c.flash,
-  (c) => c.flashStops,
-  (c) => c.fontScale,
-  (c) => c.fontWeight,
-  (c) => c.lineHeight,
-  (c) => c.size,
-]
+type AvatarAdvancedControlsProps = Pick<AvatarEditor, 'controls' | 'updateControl'>
 
-interface AvatarAdvancedControlsProps {
-  controls: AvatarControls
-  updateControl: <K extends keyof AvatarControls>(
-    key: K,
-    value: AvatarControls[K],
-  ) => void
-}
-
-export function AvatarAdvancedControls({
-  controls,
-  updateControl,
-}: AvatarAdvancedControlsProps) {
-  const hasAdvancedParams = hasChangedFields(
-    controls,
-    DEFAULT_AVATAR_CONTROLS,
-    ADVANCED_FIELDS,
-  )
+export function AvatarAdvancedControls({ controls, updateControl }: AvatarAdvancedControlsProps) {
+  const defaults = DEFAULT_AVATAR_CONTROLS
+  const hasAdvancedParams =
+    controls.flash !== defaults.flash ||
+    controls.flashStops !== defaults.flashStops ||
+    controls.fontScale !== defaults.fontScale ||
+    controls.fontWeight !== defaults.fontWeight ||
+    controls.lineHeight !== defaults.lineHeight ||
+    controls.size !== defaults.size
 
   return (
     <AdvancedSection defaultOpen={hasAdvancedParams}>

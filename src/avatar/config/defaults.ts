@@ -1,3 +1,4 @@
+import { clampNumber, isRecord } from '../../shared/config/normalize'
 import {
   DEFAULT_FLASH_STOPS,
   FLASH_STOPS_MAX,
@@ -61,7 +62,7 @@ export const DEFAULT_AVATAR_CONTROLS: AvatarControls = {
 export function normalizeAvatarControls(value: unknown): AvatarControls {
   const input = isRecord(value) ? value : {}
   const style =
-    typeof input.style === 'string' && input.style in AVATAR_STYLES
+    typeof input.style === 'string' && Object.hasOwn(AVATAR_STYLES, input.style)
       ? input.style as AvatarStyle
       : DEFAULT_AVATAR_CONTROLS.style
 
@@ -122,18 +123,4 @@ export function normalizeAvatarControls(value: unknown): AvatarControls {
       DEFAULT_AVATAR_CONTROLS.flashStops,
     ),
   }
-}
-
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
-  return Math.min(max, Math.max(min, value))
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }

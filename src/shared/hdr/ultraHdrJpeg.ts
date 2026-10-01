@@ -1,9 +1,4 @@
-import {
-  encodeGainMap,
-  sRGBToLinear,
-  writeJpegGainMap,
-  type HdrifyImage,
-} from 'hdrify'
+import { encodeGainMap, sRGBToLinear, writeJpegGainMap, type HdrifyImage } from 'hdrify'
 import { ENABLED_FLASH_STOPS } from '../config/hdr'
 import { getContext } from '../render/canvas'
 
@@ -33,10 +28,12 @@ export function encodeUltraHdrJpegBytes(
     minContentBoost: 1,
     toneMapping: 'neutral',
   })
-  return new Uint8Array(writeJpegGainMap(encoding, {
-    quality: options.quality ?? 94,
-    format: 'ultrahdr',
-  }))
+  return new Uint8Array(
+    writeJpegGainMap(encoding, {
+      quality: options.quality ?? 94,
+      format: 'ultrahdr',
+    }),
+  )
 }
 
 export function encodeUltraHdrJpegFromCanvas(
@@ -56,20 +53,20 @@ function canvasToHdrImage(
   const source = getContext(canvas).getImageData(0, 0, width, height).data
   const data = new Float32Array(width * height * 4)
 
-  for (let sourceIndex = 0, targetIndex = 0; sourceIndex < source.length; sourceIndex += 4, targetIndex += 4) {
-    const alpha = source[sourceIndex + 3] / 255
-    const sr = source[sourceIndex] / 255 * alpha + (1 - alpha)
-    const sg = source[sourceIndex + 1] / 255 * alpha + (1 - alpha)
-    const sb = source[sourceIndex + 2] / 255 * alpha + (1 - alpha)
+  for (let index = 0; index < source.length; index += 4) {
+    const alpha = source[index + 3] / 255
+    const sr = (source[index] / 255) * alpha + (1 - alpha)
+    const sg = (source[index + 1] / 255) * alpha + (1 - alpha)
+    const sb = (source[index + 2] / 255) * alpha + (1 - alpha)
     const lr = sRGBToLinear(sr)
     const lg = sRGBToLinear(sg)
     const lb = sRGBToLinear(sb)
     const boost = 1 + contentBoostMask(alpha) * (options.headroom - 1)
 
-    data[targetIndex] = lr * boost
-    data[targetIndex + 1] = lg * boost
-    data[targetIndex + 2] = lb * boost
-    data[targetIndex + 3] = 1
+    data[index] = lr * boost
+    data[index + 1] = lg * boost
+    data[index + 2] = lb * boost
+    data[index + 3] = 1
   }
 
   return {
@@ -86,8 +83,7 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
 }
 
 function contentBoostMask(alpha: number): number {
-  // HDR JPEG has no alpha; transparent edges are composited onto white.
-  // Boost only near-opaque content to avoid lighting up white AA fringes.
+  // JPEG 的透明区域合成到白底，只增强近不透明内容，避免抗锯齿边缘泛白。
   return smoothstep(HDR_BOOST_ALPHA_START, HDR_BOOST_ALPHA_END, alpha)
 }
 

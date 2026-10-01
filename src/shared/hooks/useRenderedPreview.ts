@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
-import {
-  disposePreview,
-  type PreviewResult,
-} from '../components/ImagePreview'
+import { disposePreview, type PreviewResult } from '../worker/imageWorker'
 
-interface UseRenderedPreviewOptions<T> {
+export interface UseRenderedPreviewOptions<T> {
   controls: T
   delayMs: number
   hasContent: (controls: T) => boolean

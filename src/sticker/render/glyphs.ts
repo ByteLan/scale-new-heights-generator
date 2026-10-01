@@ -2,32 +2,19 @@ import type { StickerFlavor } from '../config/defaults'
 import { fontSpec, usesFeatureFont } from './font'
 import { isEmojiGrapheme } from './layout'
 import { dilateCanvasOutwardRound } from './paint'
-import { getContext } from './canvas'
-import { createRuntimeCanvas } from './runtime'
-import type {
-  GlyphPlacement,
-  GlyphTransform,
-  IconBox,
-  StickerLayout,
-} from './types'
+import { getContext } from '../../shared/render/canvas'
+import { createRuntimeCanvas } from '../../shared/render/runtime'
+import type { GlyphPlacement, GlyphTransform, IconBox, StickerLayout } from './types'
 
 /** Emoji 透明角裁切相对短边的比例 */
 const EMOJI_CORNER_CUT_RATIO = 1 / 30
-/** Emoji alpha 二值化阈值 */
-const EMOJI_ALPHA_THRESHOLD = 16
-/** Emoji 膨胀后反走样羽化距离 */
-const EMOJI_DILATION_FEATHER = 1
+// 每个不同字素只绘制一次，后续通过 drawImage 复用，减少重复描边和填字。
 
-// ---------------------------------------------------------------------------
-// Glyph Tile Cache — pre-render each unique glyph once, then blit via drawImage.
-// This avoids repeated strokeText/fillText calls (the main web perf bottleneck).
-// ---------------------------------------------------------------------------
-
-export interface GlyphTile {
+interface GlyphTile {
   canvas: OffscreenCanvas
-  /** X offset from glyph anchor (placement.x) to tile top-left corner */
+  /** 字形锚点到缓存画布左上角的水平偏移 */
   offsetX: number
-  /** Y offset from glyph baseline (placement.baselineY) to tile top-left corner */
+  /** 字形基线到缓存画布左上角的垂直偏移 */
   offsetY: number
 }
 
@@ -35,7 +22,7 @@ export interface GlyphTile {
  * Render a single glyph to a small canvas with the given stroke width and transform.
  * The transform (scale, rotate, skew) is "baked in" to the tile.
  */
-export function renderGlyphTile(
+function renderGlyphTile(
   grapheme: string,
   fontSize: number,
   lineWidth: number,
@@ -55,15 +42,8 @@ export function renderGlyphTile(
   const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.82
   const descent = metrics.actualBoundingBoxDescent || fontSize * 0.18
 
-  // Compute transformed bounding box to determine tile size
-  const { scale, rotationDeg, skewDeg } = glyphTransform
-  const [scaleX, scaleY] = scale
-  const rotRad = (rotationDeg * Math.PI) / 180
-  const hSkewDeg = applySkew && usesFeatureFont(flavor, grapheme, chineseDominant)
-    ? skewDeg[0]
-    : 0
-  const hSkewTan = Math.tan((hSkewDeg * Math.PI) / 180)
-  const vSkewTan = Math.tan((skewDeg[1] * Math.PI) / 180)
+  // 西文 fallback 保留垂直倾斜，水平斜切仅作用于特色字体。
+  const horizontalSkew = applySkew && usesFeatureFont(flavor, grapheme, chineseDominant)
 
   // Four corners of glyph bbox relative to anchor (0, 0 = baseline left)
   const corners = [
@@ -73,23 +53,16 @@ export function renderGlyphTile(
     { x: right, y: descent },
   ]
 
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
   for (const { x, y } of corners) {
-    // Apply transform chain: scale → rotate → hSkew → vSkew
-    let tx = x * scaleX
-    let ty = y * scaleY
-    if (rotRad !== 0) {
-      const cos = Math.cos(-rotRad), sin = Math.sin(-rotRad)
-      const rx = tx * cos - ty * sin
-      const ry = tx * sin + ty * cos
-      tx = rx; ty = ry
-    }
-    if (hSkewTan !== 0) tx += hSkewTan * ty
-    if (vSkewTan !== 0) ty += vSkewTan * tx
-    minX = Math.min(minX, tx)
-    minY = Math.min(minY, ty)
-    maxX = Math.max(maxX, tx)
-    maxY = Math.max(maxY, ty)
+    const point = transformGlyphPoint(x, y, glyphTransform, horizontalSkew)
+    minX = Math.min(minX, point.x)
+    minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x)
+    maxY = Math.max(maxY, point.y)
   }
 
   // Add padding for stroke expansion + safety margin
@@ -104,12 +77,7 @@ export function renderGlyphTile(
   const ctx = getContext(canvas)
   ctx.translate(anchorX, anchorY)
 
-  if (applySkew) {
-    if (scaleX !== 1 || scaleY !== 1) ctx.scale(scaleX, scaleY)
-    if (rotRad !== 0) ctx.rotate(-rotRad)
-    if (hSkewTan !== 0) ctx.transform(1, 0, hSkewTan, 1, 0, 0)
-    if (vSkewTan !== 0) ctx.transform(1, vSkewTan, 0, 1, 0, 0)
-  }
+  if (applySkew) applyGlyphTransform(ctx, glyphTransform, horizontalSkew)
 
   ctx.font = fontSpec(flavor, fontSize, grapheme, chineseDominant)
   ctx.textBaseline = 'alphabetic'
@@ -153,26 +121,45 @@ export function buildGlyphTileCache(
     if (isEmojiGrapheme(grapheme)) {
       // Emoji: stroke tile via fill + pixel dilation; fill tile via plain fill
       if (!strokeTiles.has(grapheme)) {
-        strokeTiles.set(grapheme, renderEmojiStrokeTile(
-          grapheme, fontSize, strokeLineWidth, flavor, chineseDominant, layout,
-        ))
+        strokeTiles.set(
+          grapheme,
+          renderEmojiStrokeTile(
+            grapheme,
+            fontSize,
+            strokeLineWidth,
+            flavor,
+            chineseDominant,
+            layout,
+          ),
+        )
       }
       if (!fillTiles.has(grapheme)) {
-        fillTiles.set(grapheme, renderEmojiFillTile(
-          grapheme, fontSize, flavor, chineseDominant, layout,
-        ))
+        fillTiles.set(
+          grapheme,
+          renderEmojiFillTile(grapheme, fontSize, flavor, chineseDominant, layout),
+        )
       }
     } else {
       // Text glyph: stroke tile via strokeText; fill tile via fillText
       if (!strokeTiles.has(grapheme)) {
-        strokeTiles.set(grapheme, renderGlyphTile(
-          grapheme, fontSize, strokeLineWidth, flavor, chineseDominant, glyphTransform, skew,
-        ))
+        strokeTiles.set(
+          grapheme,
+          renderGlyphTile(
+            grapheme,
+            fontSize,
+            strokeLineWidth,
+            flavor,
+            chineseDominant,
+            glyphTransform,
+            skew,
+          ),
+        )
       }
       if (!fillTiles.has(grapheme)) {
-        fillTiles.set(grapheme, renderGlyphTile(
-          grapheme, fontSize, 0, flavor, chineseDominant, glyphTransform, skew,
-        ))
+        fillTiles.set(
+          grapheme,
+          renderGlyphTile(grapheme, fontSize, 0, flavor, chineseDominant, glyphTransform, skew),
+        )
       }
     }
   }
@@ -258,12 +245,7 @@ function renderEmojiStrokeTile(
     bounds.maxY - bounds.minY,
   )
 
-  dilateCanvasOutwardRound(
-    canvas,
-    dilateRadius,
-    EMOJI_ALPHA_THRESHOLD,
-    EMOJI_DILATION_FEATHER,
-  )
+  dilateCanvasOutwardRound(canvas, dilateRadius)
 
   return {
     canvas,
@@ -317,7 +299,7 @@ export function drawGlyphsFromTiles(
   }
 }
 
-export function resetAndPrepareTextContext(
+function resetAndPrepareTextContext(
   context: OffscreenCanvasRenderingContext2D,
   fontSize: number,
   flavor: StickerFlavor,
@@ -337,25 +319,6 @@ export function configureTextContext(
   context.textAlign = 'left'
 }
 
-export function drawFilledGlyphs(
-  context: OffscreenCanvasRenderingContext2D,
-  layout: StickerLayout,
-  originX: number,
-  originY: number,
-  filter?: (placement: GlyphPlacement) => boolean,
-): void {
-  drawPlacedGlyphs(
-    context,
-    layout,
-    originX,
-    originY,
-    (current, grapheme) => {
-      current.fillText(grapheme, 0, 0)
-    },
-    filter,
-  )
-}
-
 // 文字字形（非 Emoji）——它们走单色蒙版着色管线。
 export function isTextPlacement(placement: GlyphPlacement): boolean {
   return !isEmojiGrapheme(placement.grapheme)
@@ -369,9 +332,7 @@ export function drawEmojiGlyphs(
   originX: number,
   originY: number,
 ): void {
-  const emojiPlacements = layout.placements.filter(
-    (placement) => !isTextPlacement(placement),
-  )
+  const emojiPlacements = layout.placements.filter((placement) => !isTextPlacement(placement))
   if (emojiPlacements.length === 0) return
 
   for (const placement of emojiPlacements) {
@@ -379,18 +340,6 @@ export function drawEmojiGlyphs(
     // 避免一次性绘制全部 emoji 时，某个字符的裁剪矩形擦到相邻字符。
     drawSingleEmojiGlyph(context, layout, placement, fontSize, flavor, originX, originY)
   }
-}
-
-// 以 Emoji 原生彩色直接绘制到目标画布（不经蒙版重着色，从而保留其真实配色）。
-export function drawColorEmoji(
-  context: OffscreenCanvasRenderingContext2D,
-  layout: StickerLayout,
-  fontSize: number,
-  flavor: StickerFlavor,
-  originX: number,
-  originY: number,
-): void {
-  drawEmojiGlyphs(context, layout, fontSize, flavor, originX, originY)
 }
 
 function clearEmojiCornerArtifacts(
@@ -444,11 +393,6 @@ export function drawPlacedGlyphs(
   painter: (context: OffscreenCanvasRenderingContext2D, grapheme: string) => void,
   filter?: (placement: GlyphPlacement) => boolean,
 ): void {
-  const { scale, rotationDeg, skewDeg } = layout.glyphTransform
-  const [scaleX, scaleY] = scale
-  const rotationRad = (rotationDeg * Math.PI) / 180
-  const verticalSkewTangent = Math.tan((skewDeg[1] * Math.PI) / 180)
-
   for (const placement of layout.placements) {
     if (filter && !filter(placement)) continue
     context.save()
@@ -461,34 +405,11 @@ export function drawPlacedGlyphs(
     // 锚定在字形的基线左端；下面每一步整形都以此为中心。
     context.translate(originX + placement.x, originY + placement.baselineY)
     if (placement.skew) {
-      // 每字体的字形整形（仅文字——Emoji 保持直立）。可在
-      // FONT_REGISTRY[...].transform 中精调。
-      // 1) 缩放（水平 / 垂直）
-      if (scaleX !== 1 || scaleY !== 1) {
-        context.scale(scaleX, scaleY)
-      }
-      // 2) 逆时针旋转（正 rotationDeg = 屏幕坐标下的逆时针）
-      if (rotationRad !== 0) {
-        context.rotate(-rotationRad)
-      }
-      const horizontalSkewDeg = usesFeatureFont(
-        layout.flavor,
-        placement.grapheme,
-        layout.chineseDominant,
+      applyGlyphTransform(
+        context,
+        layout.glyphTransform,
+        usesFeatureFont(layout.flavor, placement.grapheme, layout.chineseDominant),
       )
-        ? skewDeg[0]
-        : 0
-      const horizontalSkewTangent = Math.tan(
-        (horizontalSkewDeg * Math.PI) / 180,
-      )
-      // 3) 水平斜切：x' = x + tan(水平) * y
-      if (horizontalSkewTangent !== 0) {
-        context.transform(1, 0, horizontalSkewTangent, 1, 0, 0)
-      }
-      // 4) 垂直斜切：y' = y + tan(垂直) * x（字面固有的竖向倾斜）
-      if (verticalSkewTangent !== 0) {
-        context.transform(1, verticalSkewTangent, 0, 1, 0, 0)
-      }
     }
     painter(context, placement.grapheme)
     context.restore()
@@ -586,11 +507,12 @@ function transformIconBox(box: IconBox, transform: GlyphTransform): IconBox {
 function applyGlyphTransform(
   context: OffscreenCanvasRenderingContext2D,
   transform: GlyphTransform,
+  horizontalSkew = true,
 ): void {
   const { scale, rotationDeg, skewDeg } = transform
   const [scaleX, scaleY] = scale
   const rotationRad = (rotationDeg * Math.PI) / 180
-  const horizontalSkewTangent = Math.tan((skewDeg[0] * Math.PI) / 180)
+  const horizontalSkewTangent = horizontalSkew ? Math.tan((skewDeg[0] * Math.PI) / 180) : 0
   const verticalSkewTangent = Math.tan((skewDeg[1] * Math.PI) / 180)
 
   if (scaleX !== 1 || scaleY !== 1) context.scale(scaleX, scaleY)
@@ -607,6 +529,7 @@ function transformGlyphPoint(
   x: number,
   y: number,
   transform: GlyphTransform,
+  horizontalSkew = true,
 ): { x: number; y: number } {
   const [scaleX, scaleY] = transform.scale
   let nextX = x * scaleX
@@ -622,7 +545,9 @@ function transformGlyphPoint(
     nextY = rotatedY
   }
 
-  const horizontalSkewTangent = Math.tan((transform.skewDeg[0] * Math.PI) / 180)
+  const horizontalSkewTangent = horizontalSkew
+    ? Math.tan((transform.skewDeg[0] * Math.PI) / 180)
+    : 0
   if (horizontalSkewTangent !== 0) {
     nextX += horizontalSkewTangent * nextY
   }

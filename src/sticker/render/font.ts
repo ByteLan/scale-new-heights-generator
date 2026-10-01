@@ -1,16 +1,10 @@
 import type { StickerFlavor } from '../config/defaults'
 import { CANVAS_FONT_FAMILIES } from '../config/fonts'
-import { getContext } from './canvas'
-import {
-  isCommonHanGrapheme,
-  isWesternWordGrapheme,
-} from './characters'
+import { getContext } from '../../shared/render/canvas'
+import { isCommonHanGrapheme, isWesternWordGrapheme } from './characters'
 import { getFontFaceSet, loadFontFace, withFontLoadTimeout, type FontFaceSource } from './fontFace'
-import { createRuntimeCanvas } from './runtime'
-import {
-  type GlyphMeasurement,
-  type GlyphTransform,
-} from './types'
+import { createRuntimeCanvas } from '../../shared/render/runtime'
+import { type GlyphMeasurement, type GlyphTransform } from './types'
 
 /** 字体加载后用于验证字形可用性的采样文本 */
 const FONT_SAMPLE_TEXT = '勇攀高峰测试Aa0123456789'
@@ -58,9 +52,7 @@ const FONT_REGISTRY: Record<StickerFlavor, StickerFontDescriptor> = {
   },
 }
 
-export function stickerFontDescriptor(
-  flavor: StickerFlavor,
-): StickerFontDescriptor {
+export function stickerFontDescriptor(flavor: StickerFlavor): StickerFontDescriptor {
   const descriptor = FONT_REGISTRY[flavor]
   const family = remoteFontFaces.get(flavor)?.family ?? descriptor.family
   return family === descriptor.family ? descriptor : { ...descriptor, family }
@@ -134,13 +126,14 @@ let measurementCanvas: OffscreenCanvas | null = null
 /** 浏览器画布与预设菜单共用字体分片；Node 由 runtime 注册本地字体。 */
 export function installStickerFontSources(flavor: StickerFlavor, sources?: FontFaceSource[]): void {
   const fonts = getFontFaceSet()
-  if (!fonts || !sources?.length || remoteFontFaces.has(flavor) || remoteFontDisabled.has(flavor)) return
+  if (!fonts || !sources?.length || remoteFontFaces.has(flavor) || remoteFontDisabled.has(flavor))
+    return
   const { family, weight } = FONT_REGISTRY[flavor]
   const faces: FontSubset[] = []
   try {
     for (const { source, unicodeRange } of sources) {
       const face = new FontFace(family, source, { weight, style: 'normal', unicodeRange })
-      const ranges: [number, number][] = face.unicodeRange.split(',').map(range => {
+      const ranges: [number, number][] = face.unicodeRange.split(',').map((range) => {
         const [start, end = start] = range.trim().replace(/^U\+/i, '').split('-')
         return [parseInt(start.replaceAll('?', '0'), 16), parseInt(end.replaceAll('?', 'f'), 16)]
       })
@@ -174,11 +167,14 @@ export async function ensureStickerFontLoaded(
         const code = char.codePointAt(0)!
         // 后声明的分片优先；直接加载命中的分片，避免 fonts.load() 连同
         // 重叠的大型生僻字分片一起下载。
-        const subset = remote.subsets.findLast(({ ranges }) => ranges.some(([start, end]) => code >= start && code <= end))
+        const subset = remote.subsets.findLast(({ ranges }) =>
+          ranges.some(([start, end]) => code >= start && code <= end),
+        )
         if (subset) selected.add(subset.face)
-        else if (usesFeatureFont(flavor, char, true)) throw new Error('Character missing from CDN ranges')
+        else if (usesFeatureFont(flavor, char, true))
+          throw new Error('Character missing from CDN ranges')
       }
-      await withFontLoadTimeout(Promise.all([...selected].map(face => face.load())))
+      await withFontLoadTimeout(Promise.all([...selected].map((face) => face.load())))
       if (remoteFontFaces.get(flavor) === remote) {
         const loaded = remote.subsets.filter(({ face }) => face.status === 'loaded')
         // OffscreenCanvas 会缓存同名字体的分片匹配结果。新增分片后更新族名，

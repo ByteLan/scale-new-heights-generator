@@ -1,3 +1,5 @@
+import { clampNumber, parseNumber } from './normalize'
+
 /** 抗锯齿倍率最小值 */
 export const ANTIALIAS_SCALE_MIN = 1
 /** 抗锯齿倍率最大值 */
@@ -35,8 +37,5 @@ function normalizeScale(
   max: number,
   fallback: number,
 ): number {
-  const parsed = typeof value === 'string' ? Number(value.trim()) : value
-  return typeof parsed === 'number' && Number.isFinite(parsed)
-    ? Math.min(max, Math.max(min, parsed))
-    : fallback
+  return clampNumber(parseNumber(value), min, max, fallback)
 }

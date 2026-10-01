@@ -1,28 +1,9 @@
+import { type PreviewResult } from '../worker/imageWorker'
+import type { CopiedTarget } from '../hooks/useImageActions'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '../ui/button'
 import { cn } from '../utils/cn'
-
-interface PreviewBase {
-  width: number
-  height: number
-  mime: string
-  extension: string
-}
-
-export type PreviewResult =
-  | (PreviewBase & { kind: 'bitmap'; bitmap: ImageBitmap })
-  | (PreviewBase & { kind: 'blob'; blob: Blob })
-
-export interface ImageFileResult {
-  blob: Blob
-  mime: string
-  extension: string
-}
-
-export function disposePreview(preview: PreviewResult | null): void {
-  if (preview?.kind === 'bitmap') preview.bitmap.close()
-}
 
 interface CanvasPreviewProps {
   preview: PreviewResult | null
@@ -33,7 +14,7 @@ interface CanvasPreviewProps {
 }
 
 interface PreviewActionsProps {
-  copied: 'image' | 'link' | null
+  copied: CopiedTarget | null
   isExporting: boolean
   shareUrl: string
   exportLabel?: string
@@ -64,10 +45,10 @@ export function CanvasPreview({
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const showBitmap = preview?.kind === 'bitmap'
   const previewVars = preview
-    ? {
+    ? ({
         '--preview-width': `${cssPixelSize(preview.width)}px`,
         '--preview-height': `${cssPixelSize(preview.height)}px`,
-      } as CSSProperties
+      } as CSSProperties)
     : undefined
 
   useEffect(() => {
@@ -142,42 +123,25 @@ export function PreviewActions({
   return (
     <div className="actions">
       {canCopyImage && (
-        <Button
-          variant="secondary"
-          type="button"
-          onClick={onCopyImage}
-        >
+        <Button variant="secondary" type="button" onClick={onCopyImage}>
           <Icon icon="tabler:copy" />
           {copied === 'image' ? '已复制' : '复制图片'}
         </Button>
       )}
       {IN_IFRAME ? (
         <Button variant="secondary" asChild>
-          <a
-            href={shareUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={shareUrl} target="_blank" rel="noopener noreferrer">
             <Icon icon="tabler:external-link" />
             新标签页导出
           </a>
         </Button>
       ) : (
-        <Button
-          variant="secondary"
-          type="button"
-          disabled={isExporting}
-          onClick={onExport}
-        >
+        <Button variant="secondary" type="button" disabled={isExporting} onClick={onExport}>
           <Icon icon="tabler:download" />
           {isExporting ? '导出中…' : exportLabel}
         </Button>
       )}
-      <Button
-        variant="secondary"
-        type="button"
-        onClick={onCopyLink}
-      >
+      <Button variant="secondary" type="button" onClick={onCopyLink}>
         <Icon icon="tabler:link" />
         {copied === 'link' ? '已复制' : '复制链接'}
       </Button>

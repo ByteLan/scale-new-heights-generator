@@ -1,35 +1,15 @@
-/** CJK 字素匹配正则 */
-const CJK_PATTERN =
-  /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u
-/** 常用汉字字素匹配正则 */
-const COMMON_HAN_PATTERN = /^[\u3007\u4E00-\u9FFF]$/u
-/** 拉丁字素匹配正则 */
-const LATIN_PATTERN = /\p{Script=Latin}/u
-/** 数字字素匹配正则 */
-const NUMBER_PATTERN = /\p{Number}/u
-/** 西文词内符号匹配正则 */
-const WORD_SYMBOL_PATTERN = /['’._:+/@#&%-]/u
-
 export function isCjkGrapheme(grapheme: string): boolean {
-  return CJK_PATTERN.test(grapheme)
+  return /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(grapheme)
 }
 
 export function isCommonHanGrapheme(grapheme: string): boolean {
-  return COMMON_HAN_PATTERN.test(grapheme)
-}
-
-export function isLatinGrapheme(grapheme: string): boolean {
-  return LATIN_PATTERN.test(grapheme)
-}
-
-export function isNumberGrapheme(grapheme: string): boolean {
-  return NUMBER_PATTERN.test(grapheme)
+  return /^[\u3007\u4E00-\u9FFF]$/u.test(grapheme)
 }
 
 export function isWesternWordGrapheme(grapheme: string): boolean {
-  return isLatinGrapheme(grapheme) || isNumberGrapheme(grapheme)
+  return /\p{Script=Latin}|\p{Number}/u.test(grapheme)
 }
 
 export function isWordSymbolGrapheme(grapheme: string): boolean {
-  return WORD_SYMBOL_PATTERN.test(grapheme)
+  return /['’._:+/@#&%-]/u.test(grapheme)
 }

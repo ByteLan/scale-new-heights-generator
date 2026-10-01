@@ -1,37 +1,16 @@
+import type { StickerEditor } from '../hooks/useStickerEditor'
 import { useLayoutEffect, useRef } from 'react'
 import { Textarea } from '../../shared/ui/input'
-import type {
-  StickerControls,
-  StickerEnvelopeControls,
-  StickerFlavor,
-  StickerPaddingControls,
-} from '../config/defaults'
 import { StickerAdvancedControls } from './control-panel/StickerAdvancedControls'
 import { StickerIconField } from './control-panel/StickerIconField'
 import { StickerPresetToolbar } from './control-panel/StickerPresetToolbar'
 import { StickerStyleField } from './control-panel/StickerStyleField'
 
-interface StickerControlsPanelProps {
-  controls: StickerControls
-  updateControl: <K extends keyof StickerControls>(
-    key: K,
-    value: StickerControls[K],
-  ) => void
-  updateFlavor: (flavor: StickerFlavor) => void
-  updateEnvelope: <K extends keyof StickerEnvelopeControls>(
-    key: K,
-    value: StickerEnvelopeControls[K],
-  ) => void
-  updatePadding: <K extends keyof StickerPaddingControls>(
-    key: K,
-    value: StickerPaddingControls[K],
-  ) => void
-  randomizeColors: () => void
-  updateColorAt: (index: number, value: string) => void
-  addColor: (at?: number) => void
-  removeColor: (index: number) => void
-  applyPresetText: (value: string) => void
-}
+type StickerControlsPanelProps = Pick<
+  StickerEditor,
+  'controls' | 'updateControl' | 'updateFlavor' | 'updateEnvelope' | 'updatePadding'
+  | 'randomizeColors' | 'updateColorAt' | 'addColor' | 'removeColor' | 'applyPresetText'
+>
 
 export function StickerControlsPanel({
   controls,

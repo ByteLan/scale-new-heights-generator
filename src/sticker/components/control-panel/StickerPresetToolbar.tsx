@@ -1,3 +1,4 @@
+import type { StickerEditor } from '../../hooks/useStickerEditor'
 import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon } from '@iconify/react'
 import { AngleKnob } from '../../../shared/components/AngleKnob'
@@ -6,8 +7,6 @@ import { Select } from '../../../shared/ui/select'
 import {
   defaultGradientAngle,
   STICKER_FLAVORS,
-  type StickerControls,
-  type StickerEnvelopeControls,
 } from '../../config/defaults'
 import {
   STICKER_PRESET_GROUPS,
@@ -43,18 +42,9 @@ function measurePresetInk(element: HTMLElement): PresetInkBounds | undefined {
   }
 }
 
-interface StickerPresetToolbarProps {
-  controls: StickerControls
-  updateEnvelope: <K extends keyof StickerEnvelopeControls>(
-    key: K,
-    value: StickerEnvelopeControls[K],
-  ) => void
-  randomizeColors: () => void
-  updateColorAt: (index: number, value: string) => void
-  addColor: (at?: number) => void
-  removeColor: (index: number) => void
-  applyPresetText: (value: string) => void
-}
+type StickerPresetToolbarProps = Pick<StickerEditor,
+  'controls' | 'updateEnvelope' | 'randomizeColors' | 'updateColorAt' | 'addColor' | 'removeColor' | 'applyPresetText'
+>
 
 export function StickerPresetToolbar({
   controls,

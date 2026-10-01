@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createImageWorkerClient, createLatestRenderCache, type ImageWorkerResponse } from './imageWorker'
+import {
+  createImageWorkerClient,
+  createLatestRenderCache,
+  type ImageWorkerResponse,
+} from './imageWorker'
 import { postImageWorkerResult } from './imageWorkerResult'
-import type { ImageFileResult } from '../components/ImagePreview'
 
 function fixture() {
   const worker = {
@@ -11,9 +14,19 @@ function fixture() {
   }
   const create = vi.fn<() => Worker>(() => worker as unknown as Worker)
   const client = createImageWorkerClient(create)
-  const complete = (id: number) => worker.onmessage?.({ data: {
-    type: 'export-result', id, blob: new Blob(), mime: 'image/png', extension: 'png',
-  } } as MessageEvent<ImageWorkerResponse>)
+  const complete = (id: number, type: 'render' | 'export' = 'render') =>
+    worker.onmessage?.({
+      data: {
+        type: type === 'export' ? 'export-result' : 'render-result',
+        kind: 'blob',
+        width: 1,
+        height: 1,
+        id,
+        blob: new Blob(),
+        mime: 'image/png',
+        extension: 'png',
+      },
+    } as MessageEvent<ImageWorkerResponse>)
   return { worker, create, client, complete }
 }
 
@@ -22,9 +35,9 @@ afterEach(() => vi.unstubAllGlobals())
 describe('image worker scheduling', () => {
   it('reuses the loaded worker across edits', async () => {
     const { client, create, worker, complete } = fixture()
-    await client.request<ImageFileResult>((_, id) => complete(id))
+    await client.request('render', (_, id) => complete(id))
     client.cancel()
-    await client.request<ImageFileResult>((_, id) => complete(id))
+    await client.request('render', (_, id) => complete(id))
     expect(create).toHaveBeenCalledTimes(1)
     expect(worker.terminate).not.toHaveBeenCalled()
   })
@@ -32,15 +45,19 @@ describe('image worker scheduling', () => {
   it('coalesces edits, finishes active work, and closes stale preview bitmaps', async () => {
     const { client, worker, complete } = fixture()
     const sent: number[] = []
-    const send = (_: Worker, id: number) => { sent.push(id) }
-    const first = client.request(send).catch(error => error.message)
-    const skipped = client.request(send).catch(error => error.message)
-    const latest = client.request(send)
+    const send = (_: Worker, id: number) => {
+      sent.push(id)
+    }
+    const first = client.request('render', send).catch((error) => error.message)
+    const skipped = client.request('render', send).catch((error) => error.message)
+    const latest = client.request('render', send)
     expect(sent).toEqual([0])
     expect(await first).toBe('Cancelled')
     expect(await skipped).toBe('Cancelled')
     const close = vi.fn<() => void>()
-    worker.onmessage?.({ data: { type: 'render-result', id: 0, kind: 'bitmap', bitmap: { close } } } as unknown as MessageEvent<ImageWorkerResponse>)
+    worker.onmessage?.({
+      data: { type: 'render-result', id: 0, kind: 'bitmap', bitmap: { close } },
+    } as unknown as MessageEvent<ImageWorkerResponse>)
     expect(close).toHaveBeenCalledTimes(1)
     expect(sent).toEqual([0, 2])
     complete(2)
@@ -51,15 +68,17 @@ describe('image worker scheduling', () => {
   it('prioritizes exports and does not cancel them when previews change', async () => {
     const { client, complete } = fixture()
     const sent: number[] = []
-    const send = (_: Worker, id: number) => { sent.push(id) }
-    const first = client.request(send).catch(error => error.message)
-    const queued = client.request(send).catch(error => error.message)
-    const exported = client.request(send, 'export')
+    const send = (_: Worker, id: number) => {
+      sent.push(id)
+    }
+    const first = client.request('render', send).catch((error) => error.message)
+    const queued = client.request('render', send).catch((error) => error.message)
+    const exported = client.request('export', send)
     client.cancel()
-    const latest = client.request(send)
+    const latest = client.request('render', send)
     complete(0)
     expect(sent).toEqual([0, 2])
-    complete(2)
+    complete(2, 'export')
     await exported
     expect(sent).toEqual([0, 2, 3])
     complete(3)
@@ -70,23 +89,38 @@ describe('image worker scheduling', () => {
 
   it('recovers after synchronous and asynchronous send failures', async () => {
     const { client, complete } = fixture()
-    await expect(client.request(() => { throw new Error('sync') })).rejects.toThrow('sync')
-    await expect(client.request(async () => { throw new Error('async') })).rejects.toThrow('async')
-    await client.request((_, id) => complete(id))
+    await expect(
+      client.request('render', () => {
+        throw new Error('sync')
+      }),
+    ).rejects.toThrow('sync')
+    await expect(
+      client.request('render', async () => {
+        throw new Error('async')
+      }),
+    ).rejects.toThrow('async')
+    await client.request('render', (_, id) => complete(id))
   })
 
   it('lets a new preview proceed while a cancelled icon is still loading', async () => {
     const { client, complete } = fixture()
     let release!: () => void
-    const loading = new Promise<void>(resolve => { release = resolve })
+    const loading = new Promise<void>((resolve) => {
+      release = resolve
+    })
     const posted: number[] = []
     let cancelledSignal: AbortSignal | undefined
-    const stale = client.request(async (_, id, signal) => {
-      cancelledSignal = signal
-      await loading
-      if (!signal.aborted) posted.push(id)
-    }).catch(error => error.message)
-    await client.request((_, id) => { posted.push(id); complete(id) })
+    const stale = client
+      .request('render', async (_, id, signal) => {
+        cancelledSignal = signal
+        await loading
+        if (!signal.aborted) posted.push(id)
+      })
+      .catch((error) => error.message)
+    await client.request('render', (_, id) => {
+      posted.push(id)
+      complete(id)
+    })
     expect(cancelledSignal?.aborted).toBe(true)
     expect(await stale).toBe('Cancelled')
     release()
@@ -96,12 +130,12 @@ describe('image worker scheduling', () => {
 
   it('rejects outstanding jobs on worker failure and recreates it on retry', async () => {
     const { client, worker, create, complete } = fixture()
-    const active = client.request(() => {}, 'export').catch(error => error.message)
-    const queued = client.request(() => {}, 'export').catch(error => error.message)
+    const active = client.request('export', () => {}).catch((error) => error.message)
+    const queued = client.request('export', () => {}).catch((error) => error.message)
     worker.onerror?.()
     expect(await active).toBe('Image worker failed')
     expect(await queued).toBe('Image worker failed')
-    await client.request((_, id) => complete(id))
+    await client.request('render', (_, id) => complete(id))
     expect(create).toHaveBeenCalledTimes(2)
   })
 })
@@ -121,7 +155,11 @@ describe('latest render cache', () => {
 
   it('does not cache failed renders', async () => {
     const cached = createLatestRenderCache<number>()
-    await expect(cached('a', async () => { throw new Error('failed') })).rejects.toThrow('failed')
+    await expect(
+      cached('a', async () => {
+        throw new Error('failed')
+      }),
+    ).rejects.toThrow('failed')
     expect(await cached('a', async () => 42)).toBe(42)
   })
 
@@ -131,7 +169,9 @@ describe('latest render cache', () => {
     vi.stubGlobal('postMessage', post)
     vi.stubGlobal('createImageBitmap', snapshot)
     const result = {
-      canvas: {} as OffscreenCanvas, width: 100, height: 50,
+      canvas: {} as OffscreenCanvas,
+      width: 100,
+      height: 50,
       toBlob: vi.fn<() => Promise<Blob>>(async () => new Blob(['png'])),
       toBitmap: vi.fn<() => ImageBitmap>(),
     }

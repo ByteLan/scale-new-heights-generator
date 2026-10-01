@@ -59,12 +59,6 @@ export interface StickerLayout {
   glyphTransform: GlyphTransform
 }
 
-export interface BinaryMask {
-  width: number
-  height: number
-  data: Uint8ClampedArray
-}
-
 export interface GradientExtent {
   startProjection: number
   endProjection: number
@@ -91,10 +85,4 @@ export interface RenderIcon {
   colored: boolean
 }
 
-export interface RenderResult {
-  canvas: OffscreenCanvas
-  width: number
-  height: number
-  toBlob: () => Promise<Blob>
-  toBitmap: () => ImageBitmap
-}
+export type { CanvasRenderResult as RenderResult } from '../../shared/render/canvas'

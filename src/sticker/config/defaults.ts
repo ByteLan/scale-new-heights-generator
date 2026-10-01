@@ -1,3 +1,4 @@
+import { clampNumber, isRecord } from '../../shared/config/normalize'
 import {
   ANTIALIAS_SCALE_MAX,
   ANTIALIAS_SCALE_MIN,
@@ -39,15 +40,15 @@ export interface StickerPaddingControls {
 // 渲染风味标识（命名对应参考表情包）。每种风味同时决定展示字面与配色/描边模型：
 //   • snh (勇攀高峰)：白色字形置于彩色渐变包体内——抖音美好体字面。
 //   • bs  (字节范)：彩色渐变字形带同色系深色轮廓——优设标题黑字面。
-export type StickerFlavor = 'snh' | 'bs'
+export type StickerFlavor = keyof typeof STICKER_DEFAULT_OUTLINE_WIDTH
 
-/** 贴纸渲染风味列表 */
-export const STICKER_FLAVORS: StickerFlavor[] = ['snh', 'bs']
 /** 每种贴纸风味的默认描边厚度 */
-export const STICKER_DEFAULT_OUTLINE_WIDTH: Record<StickerFlavor, number> = {
+export const STICKER_DEFAULT_OUTLINE_WIDTH = {
   snh: 20,
   bs: 14,
 }
+/** 贴纸渲染风味列表 */
+export const STICKER_FLAVORS = Object.keys(STICKER_DEFAULT_OUTLINE_WIDTH) as StickerFlavor[]
 
 // 渲染倍率的单一真源：默认值与合法区间都只在这里定义，
 // 渲染层（sticker.ts）与 Node 入口（node.ts）一律 import，禁止各自重写。
@@ -258,20 +259,6 @@ export function normalizeStickerControls(value: unknown): StickerControls {
     },
   }
 }
-
-function clampNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
-    return fallback
-  }
-
-  return Math.min(max, Math.max(min, value))
-}
-
 function normalizeColor(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback
 }
@@ -284,8 +271,4 @@ function normalizeColors(value: unknown, fallback: string[]): string[] {
   )
   if (colors.length === 0) return fallback
   return colors.slice(0, 3)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }

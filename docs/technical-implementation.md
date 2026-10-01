@@ -4,24 +4,24 @@
 
 ## 入口与模块边界
 
-浏览器应用使用 React、TanStack Router 和 Radix UI；贴纸与头像有各自的配置、状态、布局和渲染管线。`src/shared` 只放共享控件、预览、Canvas runtime 和 Worker 通信。UI 依赖属于开发依赖，安装 npm 包不会额外安装网页控件。
+浏览器应用使用 React、TanStack Router 和 Radix UI；贴纸与头像有各自的配置、状态、布局和渲染管线。`src/shared` 按控件、hooks、渲染基础和 Worker 通信分类。编辑器通过 `useToolEditor` 共用控件状态、预览防抖、URL / 本地缓存同步和图片操作；贴纸编辑器只补充预设、风味与配色等业务操作。参数读写与校验集中在 `shared/config/searchParams.ts`，有限数值解析与区间归一化集中在 `shared/config/normalize.ts`；Node 后端集中在 `shared/render/node.ts`，浏览器入口不引用它。UI 依赖属于开发依赖，安装 npm 包不会额外安装网页控件。
 
 npm 导出六个入口：
 
-| 入口 | 用途 |
-| --- | --- |
-| `@syru/byted-sticker-generator` | 贴纸预设、配置、URL 编解码和配色工具 |
-| `/core` | 可注入 Canvas runtime 的贴纸渲染核心 |
-| `/node` | 默认 Node runtime、贴纸 PNG / HDR API |
-| `/avatar` | 头像配置、URL 编解码与渲染核心 |
-| `/avatar/core` | 可注入 runtime 的头像渲染核心 |
-| `/avatar/node` | Node 头像 API |
+| 入口                            | 用途                                  |
+| ------------------------------- | ------------------------------------- |
+| `@syru/byted-sticker-generator` | 贴纸预设、配置、URL 编解码和配色工具  |
+| `/core`                         | 可注入 Canvas runtime 的贴纸渲染核心  |
+| `/node`                         | 默认 Node runtime、贴纸 PNG / HDR API |
+| `/avatar`                       | 头像配置、URL 编解码与渲染核心        |
+| `/avatar/core`                  | 可注入 runtime 的头像渲染核心         |
+| `/avatar/node`                  | Node 头像 API                         |
 
 Node 入口不依赖 DOM、React 或浏览器；默认 runtime 在首次渲染时动态加载可选依赖 `@napi-rs/canvas`。Node 最低版本为 24，与 HDR 编码依赖保持一致。
 
 ## 贴纸渲染
 
-[`sticker.ts`](../src/sticker/render/sticker.ts) 负责测量、排版、字形整形、蒙版膨胀、渐变填充和裁剪。相关步骤拆在同目录的 `layout`、`glyphs`、`mask` 和 `gradient` 模块中。浏览器在 Worker 的 `OffscreenCanvas` 上执行，Node 复用同一核心。
+[`sticker.ts`](../src/sticker/render/sticker.ts) 负责测量、排版、字形整形、蒙版膨胀、渐变填充和裁剪。相关步骤按职责放在同目录的 `layout`、`glyphs`、`paint`、`gradient` 和 `canvas` 模块中；`distanceTransform` 只负责 Emoji 圆形描边所需的欧氏距离变换。浏览器在 Worker 的 `OffscreenCanvas` 上执行，Node 复用同一核心。
 
 形状蒙版与前景蒙版分开：文字和图标参与外轮廓，彩色 Emoji 与多色图标最后叠加原生颜色。单色图标随贴纸重新着色。文字阴影按字形蒙版合成到包体内，在务实浪漫系列中保留字面投在描边上的层次。
 
@@ -46,11 +46,11 @@ node scripts/calibrate-byte-style.mjs # 测量数据改变后重新生成系数
 
 ## 字体加载
 
-| 字体 | 浏览器优先来源 | 本地来源 |
-| --- | --- | --- |
-| 抖音美好体 | [字节字体 CSS](https://fonts.bytedance.com/dfd/api/v1/css?family=DOUYINSANSBOLD-GB&display=swap) | `public/DouyinSansBold.woff2` |
-| 优设标题黑 | [在线分片 CSS](https://cn-font.claude-code-best.win/packages/ysbth/dist/优设标题黑/result.css) | `public/YouSheBiaoTiHei.ttf` |
-| Inter | [官方 CSS](https://rsms.me/inter/inter.css) | `inter-ui/web-latin/Inter-Bold-subset.woff2` |
+| 字体       | 浏览器优先来源                                                                                   | 本地来源                                     |
+| ---------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| 抖音美好体 | [字节字体 CSS](https://fonts.bytedance.com/dfd/api/v1/css?family=DOUYINSANSBOLD-GB&display=swap) | `public/DouyinSansBold.woff2`                |
+| 优设标题黑 | [在线分片 CSS](https://cn-font.claude-code-best.win/packages/ysbth/dist/优设标题黑/result.css)   | `public/YouSheBiaoTiHei.ttf`                 |
+| Inter      | [官方 CSS](https://rsms.me/inter/inter.css)                                                      | `inter-ui/web-latin/Inter-Bold-subset.woff2` |
 
 [`fontStylesheet.ts`](../src/sticker/worker/fontStylesheet.ts) 用原生 CSSOM 读取 `@font-face` 声明，解析相对 URL，再把字体来源传给 Worker。特色字体的 CSS 链接读取后移除，避免浏览器先自动下载一整套字库；Inter CSS 保留供页面使用。
 
@@ -82,22 +82,24 @@ HDR 输出将最终画布转成线性 HDR 浮点图，通过 `hdrify` 编码 Ult
 
 ## Node API 与部署
 
-
 面向机器人服务端使用 `@syru/byted-sticker-generator/node` 子入口。它不依赖 React、DOM、Web Worker 或 Chromium；默认会在真正渲染时动态加载可选依赖 `@napi-rs/canvas`。如果部署环境不想安装 native 依赖，可以通过 `new StickerGenerator(runtime)` 注入自己的 canvas runtime。
 
 ```ts
 import { renderStickerToBuffer } from '@syru/byted-sticker-generator/node'
 
-const png = await renderStickerToBuffer({
-  text: '高峰不常有',
-  envelope: {
-    colors: ['#1688ff', '#44b305'],
-    gradientAngle: 45,
+const png = await renderStickerToBuffer(
+  {
+    text: '高峰不常有',
+    envelope: {
+      colors: ['#1688ff', '#44b305'],
+      gradientAngle: 45,
+    },
+    icon: '',
   },
-  icon: '',
-}, {
-  outputScale: 2,
-})
+  {
+    outputScale: 2,
+  },
+)
 
 // 飞书机器人可以直接把 png 传给现有图片上传逻辑：
 // const imageKey = await uploadImage(bot, png, 'sticker.png')
@@ -172,12 +174,12 @@ const png = await renderAvatarToBuffer({
 })
 ```
 
-
 浏览器部署由 [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) 在推送 main 后发布 GitHub Pages，`VITE_BASE` 配置仓库路径。
 
 ## 验证与体积审计
 
 ```bash
+pnpm format:check
 pnpm lint
 pnpm exec tsc -b
 pnpm test
@@ -186,15 +188,17 @@ pnpm audit:size
 pnpm benchmark
 ```
 
+`pnpm format` 由 Oxlint 执行 Stylistic 基础规则，只统一缩进、引号和空格等格式，保留手工换行，不强制展开对象、数组或调用链。80–120 列作为阅读参考，不作为 CI 门槛；`pnpm format:check` 与 `pnpm lint` 使用同一套规则，CI 只运行一次 lint。Stylistic 仅作为开发依赖，由 Oxlint 加载，无需安装独立的 ESLint 引擎。生成的校准配置仍由校准脚本验证。
+
 `audit:size` 在内存中构建，列出实际产物原始 / gzip 体积、公共资源和依赖贡献。依赖贡献采用最终压缩前的模块长度，只用于定位大头，不能直接相加当作下载体积。两个 Worker 分别构建 HDR 延迟模块，只有使用相应工具的 HDR 功能时才请求对应文件。
 
 字体仍是主要静态资源：抖音美好体约 791 KiB，优设标题黑约 1.35 MiB，作为离线回退和 Node 字体保留。`@napi-rs/canvas` 的平台原生模块仅用于 Node，不进入网页构建。颜色库保留 Culori 按需导入，不为节省几 KiB 自写颜色转换。类名拼接使用项目所需的 `clsx`，移除了不适用的 Tailwind 合并规则。
 
-性能脚本预热 3 次，再取 9 次中位数，包含 PNG 编码，不包含图标网络请求；输出 SHA-256 便于复现。可用 `BENCH_FILTER=long pnpm benchmark` 只测长文本。以下实测结果使用同一台机器、Node 24、相同本地字体，比较 beta.2 的默认行为与本次正式版默认行为。输出尺寸策略已变化，因此不代表同分辨率逐像素等价的优化。
+性能脚本预热 3 次，再取 9 次中位数，包含 PNG 编码，不包含图标网络请求；输出 SHA-256 便于复现。可用 `BENCH_FILTER=long pnpm benchmark` 只测长文本。以下实测结果使用同一台机器、Node 24、相同本地字体，比较 beta.2 与 1.0.0 的默认行为。输出尺寸策略已变化，因此不代表同分辨率逐像素等价的优化。
 
-| 输入 | beta.2 | 1.0.0 工作分支 |
-| --- | ---: | ---: |
+| 输入          | beta.2 |  1.0.0 |
+| ------------- | -----: | -----: |
 | 300 字、15 行 | 2.45 s | 0.20 s |
-| 100 字、单行 | 1.72 s | 0.15 s |
+| 100 字、单行  | 1.72 s | 0.15 s |
 
 测试环境：macOS arm64、Node 24.21.0、`@napi-rs/canvas` 1.0.2、默认 1.5x 抗锯齿、本地字体、关闭图标下载。基线为 `9ff6cd0`（beta.2）；每个样例独立渲染，未复用最近结果缓存。长文案速度来自成品尺寸和内部画布预算的共同调整。实际设备、输入及输出参数不同，耗时也会不同。

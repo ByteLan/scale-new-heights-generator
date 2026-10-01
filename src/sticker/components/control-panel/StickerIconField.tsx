@@ -1,15 +1,10 @@
+import type { StickerEditor } from '../../hooks/useStickerEditor'
 import { Button } from '../../../shared/ui/button'
 import { Input } from '../../../shared/ui/input'
 import { FieldLabel } from '../../../shared/components/FieldLabel'
 import { DEFAULT_STICKER_CONTROLS, type StickerControls } from '../../config/defaults'
 
-interface StickerIconFieldProps {
-  icon: string
-  updateControl: <K extends keyof StickerControls>(
-    key: K,
-    value: StickerControls[K],
-  ) => void
-}
+type StickerIconFieldProps = Pick<StickerEditor, 'updateControl'> & Pick<StickerControls, 'icon'>
 
 export function StickerIconField({
   icon,

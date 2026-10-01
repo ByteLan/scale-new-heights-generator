@@ -24,6 +24,7 @@
   },
   "include": [
     "vite.config.ts",
+    "src/shared/render/node.ts",
     "src/avatar/node.ts",
     "src/avatar/node.test.ts",
     "src/sticker/node.ts",

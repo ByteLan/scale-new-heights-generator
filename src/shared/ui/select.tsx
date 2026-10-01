@@ -1,25 +1,27 @@
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Icon } from '@iconify/react'
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { cn } from '../utils/cn'
 
-export interface SelectOption {
-  value: string
+export interface SelectOption<Value extends string = string> {
+  value: Value
   label: ReactNode
   disabled?: boolean
   color?: string
 }
 
-export interface SelectGroup {
+export interface SelectGroup<Value extends string = string> {
   label: string
-  options: SelectOption[]
+  options: SelectOption<Value>[]
 }
 
-interface SelectProps {
-  value: string
+interface SelectProps<Value extends string>
+  extends Pick<ComponentProps<typeof SelectPrimitive.Content>, 'align' | 'sideOffset' | 'collisionPadding'>,
+  Pick<ComponentProps<typeof SelectPrimitive.Root>, 'onOpenChange'> {
+  value: Value
   placeholder?: string
-  options?: SelectOption[]
-  groups?: SelectGroup[]
+  options?: SelectOption<Value>[]
+  groups?: SelectGroup<Value>[]
   className?: string
   contentClassName?: string
   viewportClassName?: string
@@ -29,14 +31,10 @@ interface SelectProps {
   triggerTitle?: string
   unstyledTrigger?: boolean
   hideIndicator?: boolean
-  align?: 'start' | 'center' | 'end'
-  sideOffset?: number
-  collisionPadding?: number
-  onOpenChange?: (open: boolean) => void
-  onValueChange: (value: string) => void
+  onValueChange: (value: Value) => void
 }
 
-export function Select({
+export function Select<Value extends string>({
   value,
   placeholder,
   options,
@@ -55,12 +53,12 @@ export function Select({
   collisionPadding = 8,
   onOpenChange,
   onValueChange,
-}: SelectProps) {
+}: SelectProps<Value>) {
   return (
     <SelectPrimitive.Root
       value={value}
       onOpenChange={onOpenChange}
-      onValueChange={onValueChange}
+      onValueChange={(next) => onValueChange(next as Value)}
     >
       <SelectPrimitive.Trigger
         className={cn(!unstyledTrigger && 'ui-select-trigger', className)}

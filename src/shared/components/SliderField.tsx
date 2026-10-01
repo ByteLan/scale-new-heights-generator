@@ -1,18 +1,14 @@
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { Slider } from '../ui/slider'
 import { cn } from '../utils/cn'
 import { FieldLabel } from './FieldLabel'
 
-interface SliderFieldProps {
-  className?: string
+interface SliderFieldProps
+  extends Pick<ComponentProps<typeof Slider>, 'className' | 'step' | 'value' | 'onValueChange'>,
+  Required<Pick<ComponentProps<typeof Slider>, 'min' | 'max'>> {
   label: ReactNode
-  max: number
-  min: number
-  step?: number
-  value: number
   defaultValue?: number
   valueLabel?: ReactNode
-  onValueChange: (value: number) => void
 }
 
 export function SliderField({

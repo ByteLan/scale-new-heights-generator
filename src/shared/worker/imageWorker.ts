@@ -1,7 +1,34 @@
-import type {
-  ImageFileResult,
-  PreviewResult,
-} from '../components/ImagePreview'
+interface PreviewBase {
+  width: number
+  height: number
+  mime: string
+  extension: string
+}
+
+export type PreviewResult =
+  | (PreviewBase & { kind: 'bitmap'; bitmap: ImageBitmap })
+  | (PreviewBase & { kind: 'blob'; blob: Blob })
+
+export interface ImageFileResult {
+  blob: Blob
+  mime: string
+  extension: string
+}
+
+export interface ImageWorkerResults {
+  render: PreviewResult
+  export: ImageFileResult
+}
+
+export interface ImageWorkerRequest<T> {
+  type: keyof ImageWorkerResults
+  id: number
+  controls: T
+}
+
+export function disposePreview(preview: PreviewResult | null): void {
+  if (preview?.kind === 'bitmap') preview.bitmap.close()
+}
 
 export type ImageWorkerResponse =
   | ({ type: 'render-result'; id: number } & PreviewResult)
@@ -10,7 +37,7 @@ export type ImageWorkerResponse =
 
 interface PendingRequest {
   id: number
-  kind: 'render' | 'export'
+  kind: keyof ImageWorkerResults
   abandoned: boolean
   preparing: boolean
   controller: AbortController
@@ -19,9 +46,7 @@ interface PendingRequest {
   reject: (reason: Error) => void
 }
 
-export function createImageWorkerClient<Response extends ImageWorkerResponse>(
-  createWorker: () => Worker,
-) {
+export function createImageWorkerClient(createWorker: () => Worker) {
   let worker: Worker | null = null
   let nextId = 0
   let active: PendingRequest | null = null
@@ -29,14 +54,14 @@ export function createImageWorkerClient<Response extends ImageWorkerResponse>(
 
   const pump = () => {
     if (active || queue.length === 0) return
-    // Exports are snapshots of an explicit user action; never cancel them on edits.
+    // 导出对应用户操作时的参数快照，不随编辑取消。
     const exportIndex = queue.findIndex((request) => request.kind === 'export')
     const request = queue.splice(Math.max(0, exportIndex), 1)[0]
     active = request
     try {
       if (!worker) {
         worker = createWorker()
-        worker.onmessage = (event: MessageEvent<Response>) => {
+        worker.onmessage = (event: MessageEvent<ImageWorkerResponse>) => {
           const data = event.data
           if (!active || data.id !== active.id) {
             if (data.type === 'render-result' && data.kind === 'bitmap') data.bitmap.close()
@@ -67,14 +92,16 @@ export function createImageWorkerClient<Response extends ImageWorkerResponse>(
       }
       const sending = request.send(worker, request.id, request.controller.signal)
       if (!sending) request.preparing = false
-      void Promise.resolve(sending).then(() => {
-        request.preparing = false
-      }).catch((error: unknown) => {
-        if (active !== request) return
-        active = null
-        request.reject(error instanceof Error ? error : new Error(String(error)))
-        pump()
-      })
+      void Promise.resolve(sending)
+        .then(() => {
+          request.preparing = false
+        })
+        .catch((error: unknown) => {
+          if (active !== request) return
+          active = null
+          request.reject(error instanceof Error ? error : new Error(String(error)))
+          pump()
+        })
     } catch (error) {
       active = null
       request.reject(error instanceof Error ? error : new Error(String(error)))
@@ -100,15 +127,20 @@ export function createImageWorkerClient<Response extends ImageWorkerResponse>(
   }
 
   return {
-    request<T extends PreviewResult | ImageFileResult>(
-      // Async preparation must check signal before posting/transferring assets.
-      send: (worker: Worker, id: number, signal: AbortSignal) => void | Promise<void>,
-      kind: 'render' | 'export' = 'render',
-    ): Promise<T> {
+    request<K extends keyof ImageWorkerResults>(
+      kind: K,
+      // 异步准备资源后，先检查取消信号，再发送请求和转移资源。
+      send: PendingRequest['send'],
+    ): Promise<ImageWorkerResults[K]> {
       if (kind === 'render') cancel()
-      return new Promise<T>((resolve, reject) => {
+      return new Promise<ImageWorkerResults[K]>((resolve, reject) => {
         queue.push({
-          id: nextId++, kind, send, abandoned: false, preparing: true, controller: new AbortController(),
+          id: nextId++,
+          kind,
+          send,
+          abandoned: false,
+          preparing: true,
+          controller: new AbortController(),
           resolve: resolve as (value: PreviewResult | ImageFileResult) => void,
           reject,
         })
@@ -119,7 +151,7 @@ export function createImageWorkerClient<Response extends ImageWorkerResponse>(
   }
 }
 
-/** A single retained result bounds cache memory and also shares in-flight work. */
+/** 只缓存最近一次结果，同时复用进行中的渲染。 */
 export function createLatestRenderCache<T>() {
   let latest: { key: string; value: Promise<T> } | undefined
   return (key: string, render: () => Promise<T>): Promise<T> => {

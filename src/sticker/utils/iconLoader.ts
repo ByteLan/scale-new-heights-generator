@@ -1,3 +1,5 @@
+import type { RenderIcon } from '../render/types'
+
 // Iconify 图标是 SVG。`createImageBitmap` 无法在 Web Worker 内解码 SVG blob。
 /** 图标 SVG 在主线程栅格化后的目标边长 */
 const ICON_RASTER_SIZE = 256
@@ -6,10 +8,7 @@ const ICON_RASTER_SIZE = 256
 //   • colored=false（单色图标）：位图只作剪影折进蒙版，随后由文字配色统一重着色。
 //   • colored=true（多色 / duotone）：剪影仍折进蒙版拿外描边包围带，但顶层以原生
 //     颜色叠加，保留其真实配色。
-export interface LoadedIcon {
-  bitmap: ImageBitmap
-  colored: boolean
-}
+export type LoadedIcon = RenderIcon
 
 interface IconResource {
   blob: Blob
