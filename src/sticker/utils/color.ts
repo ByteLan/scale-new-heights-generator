@@ -24,28 +24,22 @@ export function deriveHighlightColor(base: string): string {
   return adjustHsl(base, { lightness: 0.06, saturation: 0.03 })
 }
 
-// 同色系参考的 Oklab 明度跨度约 0.24–0.30；字节范基准色需给字面提亮留出空间。
+// 深端保留输入色；浅端向亮的中性色靠近，字节范需给字面提亮留出空间。
 const SINGLE_COLOR_TONES = {
-  snh: { minLightness: 0.30, maxLightness: 0.92, span: 0.30 },
-  bs: { minLightness: 0.46, maxLightness: 0.78, span: 0.18 },
+  snh: { maxLightness: 0.92, highlightMix: 0.70 },
+  bs: { maxLightness: 0.78, highlightMix: 0.40 },
 } as const
 
-// 单色作为色系的感知中点；双色和三色保留用户设置。
+// 单色只派生亮端，不额外加深输入色；双色和三色保留用户设置。
 export function resolveGradientStops(colors: string[], flavor: StickerFlavor = 'snh'): string[] {
   if (colors.length <= 1) {
     const base = colors[0] ?? '#76baf4'
     const [lightness, a, b] = colorToOklab(base)
     const tones = SINGLE_COLOR_TONES[flavor]
-    const halfSpan = tones.span / 2
-    const midpoint = Math.max(
-      tones.minLightness + halfSpan,
-      Math.min(tones.maxLightness - halfSpan, lightness),
-    )
-    return [midpoint - halfSpan, midpoint + halfSpan].map((tone) => {
-      // 深浅两侧降低色度，避免亮端变成荧光色；中性输入仍保持中性。
-      const chromaScale = Math.min(1, tone / lightness, (1 - tone) / (1 - lightness))
-      return oklabToColor([tone, a * chromaScale, b * chromaScale])
-    })
+    const lift = Math.max(0, tones.maxLightness - lightness) * tones.highlightMix
+    // 在 Oklab 中朝白色混合，提亮时同步降低色度，保留同色系的淡色倾向。
+    const chromaScale = lightness < 1 ? 1 - lift / (1 - lightness) : 1
+    return [base, oklabToColor([lightness + lift, a * chromaScale, b * chromaScale])]
   }
   return colors
 }

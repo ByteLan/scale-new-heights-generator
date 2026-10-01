@@ -21,6 +21,8 @@ const RANDOM_PALETTE = {
   hueAttempts: 3,
   lightnessJitter: 0.025,
   chromaJitter: 0.10,
+  singleMinLightness: 0.55,
+  singleMaxLightness: 0.72,
   byteMinLightness: 0.50,
   byteMaxLightness: 0.80,
   byteMaxForegroundLightness: 0.92,
@@ -86,9 +88,11 @@ export function randomStickerColors(
   const chromaScale = 1 + (random() * 2 - 1) * RANDOM_PALETTE.chromaJitter
   const stops = count === 1 ? [pattern.stops[0]] : pattern.stops
   const colors = stops.map(([l, a, b]) => {
-    const lightness = flavor === 'bs'
-      ? Math.max(RANDOM_PALETTE.byteMinLightness, Math.min(RANDOM_PALETTE.byteMaxLightness, l + lightnessOffset))
-      : l + lightnessOffset
+    const minLightness = count === 1 ? RANDOM_PALETTE.singleMinLightness
+      : flavor === 'bs' ? RANDOM_PALETTE.byteMinLightness : 0
+    const maxLightness = count === 1 ? RANDOM_PALETTE.singleMaxLightness
+      : flavor === 'bs' ? RANDOM_PALETTE.byteMaxLightness : 1
+    const lightness = Math.max(minLightness, Math.min(maxLightness, l + lightnessOffset))
     const chroma = Math.hypot(a, b) * chromaScale
     const angle = hue(a, b) + rotation
     return oklabToColor([lightness, chroma * Math.cos(angle), chroma * Math.sin(angle)])

@@ -114,14 +114,21 @@ describe('随机配色', () => {
     }
   })
 
-  it('单色保留明显深浅跨度，中性输入不染色', () => {
-    for (const color of ['#148ded', '#3587ee', '#000000', '#ffffff']) {
+  it('单色保留输入深端，并派生更亮、更接近中性的浅端', () => {
+    for (const color of ['#123268', '#148ded', '#cc3300', '#339944']) {
       const [dark, light] = resolveGradientStops([color])
-      expect(colorToOklab(light)[0] - colorToOklab(dark)[0]).toBeGreaterThan(0.295)
+      const [l, a, b] = colorToOklab(color)
+      const [highlight, ha, hb] = colorToOklab(light)
+      expect(dark).toBe(color)
+      expect(highlight - l).toBeGreaterThan(0.15)
+      expect(Math.hypot(ha, hb)).toBeLessThan(Math.hypot(a, b))
     }
-    for (const color of resolveGradientStops(['#888888'])) {
-      const [, a, b] = colorToOklab(color)
-      expect(Math.hypot(a, b)).toBeLessThan(0.001)
+    for (const base of ['#000000', '#888888', '#ffffff']) {
+      for (const color of resolveGradientStops([base])) {
+        const [, a, b] = colorToOklab(color)
+        expect(Math.hypot(a, b)).toBeLessThan(0.001)
+        expect(colorToOklab(color)[0]).toBeGreaterThanOrEqual(colorToOklab(base)[0] - 0.001)
+      }
     }
   })
 

@@ -25,9 +25,29 @@ Node 入口不依赖 DOM、React 或浏览器；默认 runtime 在首次渲染�
 
 形状蒙版与前景蒙版分开：文字和图标参与外轮廓，彩色 Emoji 与多色图标最后叠加原生颜色。单色图标随贴纸重新着色。文字阴影按字形蒙版合成到包体内，在务实浪漫系列中保留字面投在描边上的层次。
 
-渐变端点按可见蒙版在渐变方向上的投影范围计算，让端点颜色覆盖实际形状。预设下拉采用对应系列字体，用 Canvas 的实际字面包围盒设置 CSS 渐变范围；优设标题黑文字放大 1.25 倍，行间距维持原值。
+渐变端点按可见蒙版在渐变方向上的投影范围计算，让端点颜色覆盖实际形状。预设下拉采用对应系列字体和 `line-height: 1.2`，渐变背景自然铺满文字元素，不使用 JS 测量字面高度或动态设置背景尺寸；优设标题黑文字放大 1.25 倍，选项内边距维持原值。
 
-SVG 图标通过 Iconify 加载；浏览器主线程把 SVG 栅格化为 `ImageBitmap` 再转移到 Worker。预设的 `iconTilt` 是逐个比较直立与倾斜形状后选定的配置。
+系列的描边校准放在预设组默认值中：字节范为 10，务实浪漫系列为 14，其他组沿用基础值。
+
+SVG 图标通过 Iconify 加载；浏览器主线程把 SVG 栅格化为 `ImageBitmap` 再转移到 Worker。预设按圆角、轮廓和含义选用 Font Awesome、Phosphor、Fluent 等图标，保留已有较贴合的行星和 13+。`iconTilt` 是逐个比较直立与倾斜形状后选定的配置，不按动感推断。
+
+`mergeGradient` 控制图标是否与整段文字共用渐变区域：字节范默认 `true`，勇攀高峰默认 `false`。独立时按文字蒙版和图标蒙版分别计算投影范围，字面、描边和边缘环复用各自区域；合并时按总蒙版计算。阴影仍使用原有合成方式，彩色图标保留原生前景。网页「变换」中的开关、Node 参数及分享链接的 `mg` 参数使用相同语义。
+
+### 图标来源
+
+预设只保存 Iconify ID，通过接口加载 SVG；生成时统一着色并按预设倾斜。图标来源与许可依据 [Iconify 官方图标集声明](https://github.com/iconify/icon-sets/blob/master/collections.json)。原始参考图片仅用于本地对照，不打包进项目或 npm。
+
+| 图标集 | 作者 / 来源 | 许可 |
+| --- | --- | --- |
+| Font Awesome 7 Solid | [Dave Gandy](https://github.com/FortAwesome/Font-Awesome) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Streamline | [Streamline](https://github.com/webalys-hq/streamline-vectors) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Solar | [480 Design](https://www.figma.com/community/file/1166831539721848736) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Game Icons（火炬） | [GameIcons](https://github.com/game-icons/icons) | [CC BY 3.0](https://github.com/game-icons/icons/blob/master/license.txt) |
+| Material Design Icons | [Pictogrammers](https://github.com/Templarian/MaterialDesign) | [Apache 2.0](https://github.com/Templarian/MaterialDesign/blob/master/LICENSE) |
+| Phosphor | [Phosphor Icons](https://github.com/phosphor-icons/core) | [MIT](https://github.com/phosphor-icons/core/blob/main/LICENSE) |
+| Fluent UI System Icons | [Microsoft](https://github.com/microsoft/fluentui-system-icons) | [MIT](https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE) |
+| Tabler Icons | [Paweł Kuna](https://github.com/tabler/tabler-icons) | [MIT](https://github.com/tabler/tabler-icons/blob/master/LICENSE) |
+| Unicons | [Iconscout](https://github.com/Iconscout/unicons) | [Apache 2.0](https://github.com/Iconscout/unicons/blob/master/LICENSE) |
 
 ## 配色与校准
 
@@ -38,6 +58,12 @@ SVG 图标通过 Iconify 加载；浏览器主线程把 SVG 栅格化为 `ImageB
 模型特征为 `[1, L, a, b, 邻色ΔL, 邻色Δa, 邻色Δb]`。测量数据放在 [`byte-style-palettes.json`](../scripts/fixtures/byte-style-palettes.json)，仅保存 RGB 色值，不打包原始参考图。脚本使用带正则化的最小二乘拟合，生成 [`byteStyleCalibration.ts`](../src/sticker/config/byteStyleCalibration.ts)。明度分离限制、近灰色处理和色域映射也有具名参数及注释。
 
 超出 sRGB 色域时，在固定明度和色相下二分缩减色度，避免逐通道裁切改变颜色关系。明度分离限制帮助维持字面与轮廓差异，但不等于对任意输入保证可访问性对比度。
+
+单色保留输入色作为深端，只派生更亮、更接近中性的浅端。在 Oklab 中朝白色混合，按剩余明度空间同步降低色度，保留同色系的淡色倾向；勇攀高峰的浅端明度上限为 `0.92`，字节范为 `0.78`，为字面提亮留出空间。已经很亮的输入不再额外加深，灰色输入仍保持中性。随机单色的基准明度先调整到 `0.55–0.72`，避免直接采用预设里很暗的端点；字节范仍经过最终字面检查。手动输入的双色、三色保持原值。
+
+[`randomPalette.ts`](../src/sticker/utils/randomPalette.ts) 统一单色、双色、三色随机流程，`randomStickerColors(base, { flavor, count }, random)` 可指定风味、色数和随机源；未指定色数时仍以单色为主、三色较少。已有 `randomVividColors` 接口保留兼容。随机模式复用预设端点在 Oklab 中的相对明度、色度和色相差，再整体旋转色相并作小幅变化。参考系列同时有同色系、邻色、跨色相，以及深色中段的三色，没有统一的固定饱和度或色相间距。字节范没有三色预设，三色随机借用勇攀高峰的色相关系，并约束到字节范基准明度范围。
+
+字节范随机结果额外经过实际字面模型检查：限制提亮后的最高明度和浅色端的色度，必要时整体降低基准明度，避免基准色再提亮后接近白色。此约束只作用于随机生成，不覆盖用户手动选择的颜色或现有预设。
 
 ```bash
 pnpm calibrate:colors                 # 检查测量数据能否重现现有系数；CI 也执行
@@ -52,11 +78,11 @@ node scripts/calibrate-byte-style.mjs # 测量数据改变后重新生成系数
 | 优设标题黑 | [在线分片 CSS](https://cn-font.claude-code-best.win/packages/ysbth/dist/优设标题黑/result.css)   | `public/YouSheBiaoTiHei.ttf`                 |
 | Inter      | [官方 CSS](https://rsms.me/inter/inter.css)                                                      | `inter-ui/web-latin/Inter-Bold-subset.woff2` |
 
-[`fontStylesheet.ts`](../src/sticker/worker/fontStylesheet.ts) 用原生 CSSOM 读取 `@font-face` 声明，解析相对 URL，再把字体来源传给 Worker。特色字体的 CSS 链接读取后移除，避免浏览器先自动下载一整套字库；Inter CSS 保留供页面使用。
+[`fontStylesheet.ts`](../src/sticker/worker/fontStylesheet.ts) 保留 CDN CSS 供网页直接使用，并用原生 CSSOM 读取同一份 `@font-face` 声明，解析相对 URL，再把字体来源传给 Worker。CSS 请求按 URL 共享 Promise；页面与 Worker 各自注册字体，字体文件请求可复用浏览器缓存。预设菜单直接使用 CDN 原始字体族，打开时用原生字体 API 加载预设文字；失败才加载本地整库，不增加菜单等待状态或字面高度测量。
 
-Worker 和预设下拉按当前文字选择 `unicode-range` 分片。重叠区间遵循后声明优先，避免把相同字符所在的所有分片都下载。字体 CSS 与字库请求分别最多等待 5 秒；任一步失败或特色字体缺少当前字符时，移除已注册的远程字体并回退本地整库。同一页面会话内保持本地回退，重新打开页面后重试 CDN。超时后迟到的远程字体不会覆盖本地字体。
+Worker 按当前文字选择 `unicode-range` 分片。重叠区间遵循后声明优先，避免把相同字符所在的所有分片都下载。字体 CSS 与字库请求分别最多等待 5 秒；任一步失败或特色字体缺少当前字符时，移除已注册的远程字体并回退本地整库。同一页面会话内保持本地回退，重新打开页面后重试 CDN。超时后迟到的远程字体不会覆盖本地字体。
 
-Worker 的 Canvas 可能保留同名字体的旧分片匹配结果，导致切换预设后新字符使用系统字体。每次新增已加载分片时，使用包含分片数量的字体族名，并按 CSS 声明顺序重新注册已加载分片，让测量与绘制重新匹配。没有新增分片时保持族名与注册结果，族名数量受分片总数限制；预设菜单读取同一个当前族名。
+Worker 的 Canvas 可能保留同名字体的旧分片匹配结果，导致切换预设后新字符使用系统字体。每次新增已加载分片时，使用带 `Render` 标识和分片数量的内部字体族名，并按 CSS 声明顺序重新注册已加载分片，让测量与绘制重新匹配。没有新增分片时保持族名与注册结果，族名数量受分片总数限制。这不更改字体文件，也不影响预设菜单的 CDN 字体名。浏览器本地回退使用 `DouyinSans-Local`、`YouSheBiaoTiHei-Local`，与 CDN 字体族区分。
 
 Node 始终从本地注册字体，不读取 CDN。Inter 本地子集来自已有 `inter-ui` 依赖，不在 `public` 中复制文件；没有增加新的静态字库或参考图片。
 
@@ -85,21 +111,21 @@ HDR 输出将最终画布转成线性 HDR 浮点图，通过 `hdrify` 编码 Ult
 面向机器人服务端使用 `@syru/byted-sticker-generator/node` 子入口。它不依赖 React、DOM、Web Worker 或 Chromium；默认会在真正渲染时动态加载可选依赖 `@napi-rs/canvas`。如果部署环境不想安装 native 依赖，可以通过 `new StickerGenerator(runtime)` 注入自己的 canvas runtime。
 
 ```ts
-import { renderStickerToBuffer } from '@syru/byted-sticker-generator/node'
+import { renderStickerToBuffer } from "@syru/byted-sticker-generator/node";
 
 const png = await renderStickerToBuffer(
   {
-    text: '高峰不常有',
+    text: "高峰不常有",
     envelope: {
-      colors: ['#1688ff', '#44b305'],
+      colors: ["#1688ff", "#44b305"],
       gradientAngle: 45,
     },
-    icon: '',
+    icon: "",
   },
   {
     outputScale: 2,
   },
-)
+);
 
 // 飞书机器人可以直接把 png 传给现有图片上传逻辑：
 // const imageKey = await uploadImage(bot, png, 'sticker.png')
@@ -109,41 +135,44 @@ const png = await renderStickerToBuffer(
 Web 高级设置与 Node 渲染都支持 1-5x 内部超采样抗锯齿，默认 1.5x，用来压掉斜线和斜切边缘的阶梯锯齿。极限性能或排障场景可临时关闭：
 
 ```ts
-await renderStickerToBuffer('高峰不常有', {
+await renderStickerToBuffer("高峰不常有", {
   antialiasScale: 1,
-})
+});
 ```
 
 如果运行环境禁止出网，可关闭 Iconify 图标拉取：
 
 ```ts
-const png = await renderStickerToBuffer('高峰不常有', { loadIcon: false })
+const png = await renderStickerToBuffer("高峰不常有", { loadIcon: false });
 ```
 
 自定义 runtime 时，不需要安装 `@napi-rs/canvas`。runtime 至少需要提供 `createCanvas` 和 `toPngBytes`；如果要自动注册字体或加载前缀图标，再补 `registerFont` / `hasFont` / `loadImage`：
 
 ```ts
-import { StickerGenerator, type StickerGeneratorRuntime } from '@syru/byted-sticker-generator/node'
+import {
+  StickerGenerator,
+  type StickerGeneratorRuntime,
+} from "@syru/byted-sticker-generator/node";
 
 const runtime: StickerGeneratorRuntime = {
   createCanvas: (width, height) => myCanvasFactory(width, height),
   toPngBytes: async (canvas) => await encodePng(canvas),
-}
+};
 
-const generator = new StickerGenerator(runtime)
-const png = await generator.renderBuffer('高峰不常有', { loadIcon: false })
+const generator = new StickerGenerator(runtime);
+const png = await generator.renderBuffer("高峰不常有", { loadIcon: false });
 ```
 
 包内会默认注册 `public/DouyinSansBold.woff2` 与 `public/YouSheBiaoTiHei.ttf`。如果部署系统把字体复制到了其他目录，可以显式传入：
 
 ```ts
-await renderStickerToBuffer('高峰不常有', {
+await renderStickerToBuffer("高峰不常有", {
   fontFiles: {
-    snh: '/opt/fonts/DouyinSansBold.woff2',
-    bs: '/opt/fonts/YouSheBiaoTiHei.ttf',
-    inter: '/opt/fonts/Inter-Bold-subset.woff2',
+    snh: "/opt/fonts/DouyinSansBold.woff2",
+    bs: "/opt/fonts/YouSheBiaoTiHei.ttf",
+    inter: "/opt/fonts/Inter-Bold-subset.woff2",
   },
-})
+});
 ```
 
 Inter Latin Bold 默认从 `inter-ui/web-latin/Inter-Bold-subset.woff2` 解析，注册为独立字体族 `Inter Latin Bold`；缺失时会退回系统 sans-serif。Emoji / Symbol fallback 字体会按运行环境可用性注册：macOS 优先 Apple Color Emoji / Apple Symbols，Windows 走 Segoe UI Emoji / Segoe UI Symbol，Linux 或容器环境可使用系统安装或显式传入的 Noto 字体。
@@ -151,27 +180,33 @@ Inter Latin Bold 默认从 `inter-ui/web-latin/Inter-Bold-subset.woff2` 解析�
 根入口只导出配置、预设、URL 编解码和配色工具等纯逻辑：
 
 ```ts
-import { DEFAULT_STICKER_CONTROLS, STICKER_PRESET_LIST } from '@syru/byted-sticker-generator'
+import {
+  DEFAULT_STICKER_CONTROLS,
+  STICKER_PRESET_LIST,
+} from "@syru/byted-sticker-generator";
 ```
 
 `core` 子入口导出不绑定 Node 的渲染核心，适合在 Web 或自定义 Canvas runtime 中复用：
 
 ```ts
-import { renderSticker, setCanvasRuntime } from '@syru/byted-sticker-generator/core'
+import {
+  renderSticker,
+  setCanvasRuntime,
+} from "@syru/byted-sticker-generator/core";
 ```
 
 飞书头像使用独立入口，不依赖 sticker 的字形/描边管线：
 
 ```ts
-import { renderAvatarToBuffer } from '@syru/byted-sticker-generator/avatar/node'
+import { renderAvatarToBuffer } from "@syru/byted-sticker-generator/avatar/node";
 
 const png = await renderAvatarToBuffer({
-  text: '前端群',
-  style: 'sunset',
-  mode: 'outline',
+  text: "前端群",
+  style: "sunset",
+  mode: "outline",
   size: 512,
   rotation: -8,
-})
+});
 ```
 
 浏览器部署由 [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) 在推送 main 后发布 GitHub Pages，`VITE_BASE` 配置仓库路径。
