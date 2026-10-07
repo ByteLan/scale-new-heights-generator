@@ -30,7 +30,7 @@ pnpm dev
 npm 包名为 `@syru/byted-sticker-generator`，需要 Node 24+。
 
 ```bash
-npm install @syru/byted-sticker-generator@^1.0.1
+npm install @syru/byted-sticker-generator@^1.1.0
 ```
 
 ```ts
