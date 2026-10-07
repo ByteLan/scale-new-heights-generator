@@ -14,9 +14,6 @@ importers:
       hdrify:
         specifier: ^0.12.1
         version: 0.12.1
-      inter-ui:
-        specifier: ^4.1.1
-        version: 4.1.1
     devDependencies:
       '@iconify/react':
         specifier: ^6.0.2
@@ -1227,10 +1224,6 @@ packages:
   import-without-cache@0.4.0:
     resolution: {integrity: sha512-NkJQA7oZ4YHQhd2+H3BoRFKF3d/XNsiKpHZCQEMH9pDX27hQQLsTyOocyRgaIVtf8gHX3Nt3LPkR4e5EdtPAGQ==}
     engines: {node: ^22.18.0 || >=24.0.0}
-
-  inter-ui@4.1.1:
-    resolution: {integrity: sha512-451h0J29HyOmA+JXgSi/6M12tL7ZCZ8arYKZUXiOXTJpJbAKqJvFh3k5SiV3x7tKe0C0KyrKUUiQIvvZ2PQDcA==}
-    engines: {node: '>=16.0.0'}
 
   isbot@5.2.1:
     resolution: {integrity: sha512-dJ+LpKyClQZ7NG+j3OensC/mAZkGpukE9YUrgPYvAZj2doVL0edfDgywTUh5CXa0o+nW9a1V9e5+CJTX8+SxRw==}
@@ -2474,8 +2467,6 @@ snapshots:
   ieee754@1.2.1: {}
 
   import-without-cache@0.4.0: {}
-
-  inter-ui@4.1.1: {}
 
   isbot@5.2.1: {}
 

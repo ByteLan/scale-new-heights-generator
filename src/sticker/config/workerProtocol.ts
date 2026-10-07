@@ -6,5 +6,4 @@ import type { FontFaceSource } from '../render/fontFace'
 export interface WorkerRequest extends ImageWorkerRequest<StickerControls> {
   icon: RenderIcon | null
   fonts?: FontFaceSource[]
-  interFont?: FontFaceSource
 }

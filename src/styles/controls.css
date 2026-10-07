@@ -104,6 +104,10 @@
   overflow: hidden;
 }
 
+.sticker-text-input {
+  font-size: 1.25rem;
+}
+
 .field {
   display: grid;
   grid-template-columns: 4.5rem minmax(0, 1fr) max-content;

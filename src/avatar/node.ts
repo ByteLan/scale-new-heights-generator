@@ -4,7 +4,7 @@ import {
   setCanvasRuntime,
   type CanvasRuntime,
 } from '../shared/render/runtime'
-import { createNapiCanvasRuntime as createSharedNapiCanvasRuntime } from '../shared/render/node'
+import { createNapiCanvasRuntime } from '../shared/render/node'
 import type { TextRenderInput } from '../shared/render/input'
 import type { AvatarControls } from './config/defaults'
 import { renderAvatar } from './render/avatar'
@@ -15,9 +15,7 @@ export type AvatarGeneratorRuntime = CanvasRuntime
 
 let defaultGeneratorPromise: Promise<AvatarGenerator> | null = null
 
-export function createNapiCanvasRuntime(): Promise<AvatarGeneratorRuntime> {
-  return createSharedNapiCanvasRuntime()
-}
+export { createNapiCanvasRuntime } from '../shared/render/node'
 
 async function defaultGenerator(): Promise<AvatarGenerator> {
   defaultGeneratorPromise ??= createNapiCanvasRuntime().then(

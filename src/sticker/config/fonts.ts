@@ -1,10 +1,3 @@
-/** 拉丁字符专用字体族名 */
-export const LATIN_FONT_FAMILY = 'Inter Latin Bold'
-/** Node 本地拉丁字体来源；网页优先使用 Inter 官方 CSS */
-export const LATIN_FONT_PACKAGE_PATH = 'inter-ui/web-latin/Inter-Bold-subset.woff2'
-/** 拉丁字符字体特性设置 */
-export const LATIN_FONT_FEATURE_SETTINGS = '"ss01" 1, "ss04" 1'
-
 /** Emoji 与符号字体候选描述 */
 export const EMOJI_SYMBOL_FONT_DESCRIPTORS = [
   {
@@ -41,7 +34,6 @@ export const EMOJI_SYMBOL_FONT_DESCRIPTORS = [
 
 /** 文本文字 fallback 字体族 */
 export const TEXT_FONT_FAMILIES = [
-  LATIN_FONT_FAMILY,
   'PingFang SC',
   'Noto Sans SC',
   'Microsoft YaHei',

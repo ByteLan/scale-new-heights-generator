@@ -7,7 +7,6 @@ import {
   ensureStickerFontLoaded,
   fontGlyphTransform,
   iconGlyphTransformFrom,
-  isChineseDominant,
   measureGlyphWithCanvas,
 } from './font'
 import { createStickerLayout, mergeBounds } from './layout'
@@ -69,7 +68,6 @@ export async function renderSticker(
     ? iconGlyphTransformFrom(baseTransform)
     : IDENTITY_GLYPH_TRANSFORM
 
-  const chineseDominant = isChineseDominant(text)
   const measurements = new Map<string, GlyphMeasurement>()
   let layout = createStickerLayout(text, {
     fontSize: renderControls.fontSize,
@@ -85,7 +83,6 @@ export async function renderSticker(
           grapheme,
           fontSize,
           renderControls.flavor,
-          chineseDominant,
         )
         measurements.set(grapheme, measurement)
       }
@@ -302,14 +299,7 @@ export async function renderSticker(
   }
 
   // Emoji 以原生彩色叠加在最上层（不参与蒙版着色，保留其真实配色）。
-  drawEmojiGlyphs(
-    outputContext,
-    layout,
-    renderControls.fontSize,
-    renderControls.flavor,
-    originX,
-    originY,
-  )
+  drawEmojiGlyphs(outputContext, layout, originX, originY)
 
   // 多色 / duotone 图标：剪影已折进蒙版拿到外描边包围带，此处再以原生颜色叠加在
   // 最上层，覆盖掉被统一重着色的白/渐变填充，保留图标自身配色。

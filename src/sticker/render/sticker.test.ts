@@ -6,7 +6,7 @@ import {
   isEmojiGrapheme,
   measureSkewedGlyphBounds,
 } from './layout'
-import { isChineseDominant, usesFeatureFont } from './font'
+import { fontSpec, stickerFontDescriptor, usesFeatureFont } from './font'
 import { findOpaqueBounds } from './canvas'
 import { splitGraphemes } from '../../shared/render/input'
 import type { GlyphMeasurement } from './types'
@@ -31,35 +31,19 @@ describe('splitGraphemes', () => {
   })
 })
 
-describe('usesFeatureFont', () => {
-  it('uses feature fonts only for the intended scripts', () => {
-    expect(usesFeatureFont('snh', '高')).toBe(true)
-    expect(usesFeatureFont('snh', '〇')).toBe(true)
-    expect(usesFeatureFont('snh', 'あ')).toBe(false)
-    expect(usesFeatureFont('snh', '가')).toBe(false)
-    expect(usesFeatureFont('snh', '㐀')).toBe(false)
-    expect(usesFeatureFont('snh', '𠀀')).toBe(false)
-    // snh 西文/数字仅在中文占多数时随特色字体排版。
-    expect(usesFeatureFont('snh', 'A', true)).toBe(true)
-    expect(usesFeatureFont('snh', '1', true)).toBe(true)
-    expect(usesFeatureFont('snh', 'A', false)).toBe(false)
-    expect(usesFeatureFont('snh', '1', false)).toBe(false)
-    // bs 中英文与数字全部走优设标题黑。
-    expect(usesFeatureFont('bs', '高')).toBe(true)
-    expect(usesFeatureFont('bs', 'A')).toBe(true)
-    expect(usesFeatureFont('bs', '1')).toBe(true)
-    expect(usesFeatureFont('bs', '🙂')).toBe(false)
-    expect(usesFeatureFont('snh', '🙂', true)).toBe(false)
+describe('sticker font selection', () => {
+  it('keeps unsupported scripts and emoji on the fallback fonts', () => {
+    for (const grapheme of ['あ', '가', '㐀', '𠀀', '🙂']) {
+      expect(usesFeatureFont(grapheme)).toBe(false)
+    }
   })
-})
 
-describe('isChineseDominant', () => {
-  it('counts common Han characters instead of the full CJK bucket', () => {
-    expect(isChineseDominant('勇攀A')).toBe(true)
-    expect(isChineseDominant('勇AAAAA')).toBe(false)
-    expect(isChineseDominant('あA')).toBe(false)
-    expect(isChineseDominant('가A')).toBe(false)
-    expect(isChineseDominant('𠀀A')).toBe(false)
+  it.each(['snh', 'bs'] as const)('uses the %s feature font for Chinese, Latin and digits without surrounding text', (flavor) => {
+    const { family } = stickerFontDescriptor(flavor)
+    for (const grapheme of ['高', '〇', 'A', '1']) {
+      expect(fontSpec(flavor, 128, grapheme)).toMatch(`bold 128px "${family}",`)
+    }
+    expect(fontSpec(flavor, 128, '🙂')).not.toContain(`"${family}"`)
   })
 })
 

@@ -1,6 +1,5 @@
 import { Buffer } from 'node:buffer'
 import { existsSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import {
   STICKER_FLAVORS,
@@ -13,8 +12,6 @@ import {
 import {
   EMOJI_SYMBOL_FONT_DESCRIPTORS,
   type EmojiSymbolFontKey,
-  LATIN_FONT_FAMILY,
-  LATIN_FONT_PACKAGE_PATH,
 } from './config/fonts'
 import { stickerFontDescriptor } from './render/font'
 import { renderSticker } from './render/sticker'
@@ -23,7 +20,7 @@ import {
   setCanvasRuntime,
   type CanvasRuntime,
 } from '../shared/render/runtime'
-import { createNapiCanvasRuntime as createSharedNapiCanvasRuntime } from '../shared/render/node'
+import { createNapiCanvasRuntime } from '../shared/render/node'
 import { normalizeTextRenderInput, type TextRenderInput } from '../shared/render/input'
 import {
   ULTRA_HDR_JPEG_EXTENSION,
@@ -46,7 +43,7 @@ export interface StickerImageResult {
 
 export type StickerGeneratorRuntime = CanvasRuntime
 
-export type NodeStickerFontFiles = Partial<Record<StickerFlavor | EmojiSymbolFontKey | 'inter', string>>
+export type NodeStickerFontFiles = Partial<Record<StickerFlavor | EmojiSymbolFontKey, string>>
 
 export interface RenderStickerNodeOptions {
   /**
@@ -66,9 +63,7 @@ export interface RenderStickerNodeOptions {
 const registeredFontPaths = new Set<string>()
 let defaultGeneratorPromise: Promise<StickerGenerator> | null = null
 
-export function createNapiCanvasRuntime(): Promise<StickerGeneratorRuntime> {
-  return createSharedNapiCanvasRuntime()
-}
+export { createNapiCanvasRuntime } from '../shared/render/node'
 
 async function defaultGenerator(): Promise<StickerGenerator> {
   defaultGeneratorPromise ??= createNapiCanvasRuntime().then(
@@ -102,15 +97,6 @@ function findBundledFontFile(fileName: string): string {
   return ''
 }
 
-function resolveLatinFontFile(): string {
-  try {
-    const require = createRequire(import.meta.url)
-    return require.resolve(LATIN_FONT_PACKAGE_PATH)
-  } catch {
-    return ''
-  }
-}
-
 function resolveOptionalFontFile(
   explicitPath: string | undefined,
   bundledFile: string | undefined,
@@ -140,16 +126,6 @@ function registerStickerFontsWithRuntime(
       throw new Error(`注册字体失败：${fontPath}`)
     }
     registeredFontPaths.add(fontPath)
-  }
-
-  // 西文字体：Inter Bold 拉丁子集。缺失时静默跳过，退回系统 sans-serif。
-  const interPath = fontFiles.inter ?? resolveLatinFontFile()
-  if (interPath && !registeredFontPaths.has(interPath) && !runtime.hasFont?.(LATIN_FONT_FAMILY)) {
-    if (runtime.registerFont(interPath, LATIN_FONT_FAMILY)) {
-      registeredFontPaths.add(interPath)
-    } else {
-      console.warn(`[sticker] 字体注册失败：${LATIN_FONT_FAMILY}`)
-    }
   }
 
   for (const descriptor of EMOJI_SYMBOL_FONT_DESCRIPTORS) {

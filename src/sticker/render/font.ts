@@ -2,14 +2,12 @@ import type { StickerFlavor } from '../config/defaults'
 import { CANVAS_FONT_FAMILIES } from '../config/fonts'
 import { getContext } from '../../shared/render/canvas'
 import { isCommonHanGrapheme, isWesternWordGrapheme } from './characters'
-import { getFontFaceSet, loadFontFace, withFontLoadTimeout, type FontFaceSource } from './fontFace'
+import { getFontFaceSet, withFontLoadTimeout, type FontFaceSource } from './fontFace'
 import { createRuntimeCanvas } from '../../shared/render/runtime'
 import { type GlyphMeasurement, type GlyphTransform } from './types'
 
 /** 字体加载后用于验证字形可用性的采样文本 */
 const FONT_SAMPLE_TEXT = '勇攀高峰测试Aa0123456789'
-/** 判断整段文本以中文为主的最小汉字占比 */
-const CHINESE_DOMINANT_MIN_RATIO = 0.2
 
 export interface StickerFontDescriptor {
   family: string
@@ -68,47 +66,19 @@ export function fontGlyphTransform(flavor: StickerFlavor): GlyphTransform {
   return stickerFontDescriptor(flavor).transform
 }
 
-// 判断整段文本是否以中文为主。用于 snh：中文比例足够高时，少量英文数字随抖音
-// 美好体排版更协调；中文比例低时，西文交给 Inter 以获得更现代的观感。
-export function isChineseDominant(text: string): boolean {
-  let han = 0
-  let latin = 0
-  for (const char of text) {
-    if (isCommonHanGrapheme(char)) han += 1
-    else if (isWesternWordGrapheme(char)) latin += 1
-  }
-  const textCount = han + latin
-  return han > 0 && textCount > 0 && han / textCount >= CHINESE_DOMINANT_MIN_RATIO
-}
-
-export function usesFeatureFont(
-  flavor: StickerFlavor,
-  grapheme?: string,
-  chineseDominant = false,
-): boolean {
-  if (!grapheme) return false
-  if (isCommonHanGrapheme(grapheme)) return true
-  // 优设标题黑字库含完整中英文与数字，西文与数字全部走特色字体。
-  if (flavor === 'bs') {
-    return isWesternWordGrapheme(grapheme)
-  }
-  // 抖音美好体西文字形偏窄：仅在中文占多数时用它承载英文数字，
-  // 中文很少时西文落到 Inter。
-  if (chineseDominant && isWesternWordGrapheme(grapheme)) {
-    return true
-  }
-  return false
+/** 中英文和数字统一使用当前样式的特色字体，其余字符保留回退。 */
+export function usesFeatureFont(grapheme?: string): boolean {
+  return !!grapheme && (isCommonHanGrapheme(grapheme) || isWesternWordGrapheme(grapheme))
 }
 
 export function fontSpec(
   flavor: StickerFlavor,
   fontSize: number,
   grapheme?: string,
-  chineseDominant = false,
 ): string {
   const { family, weight } = stickerFontDescriptor(flavor)
   const families = [
-    ...(usesFeatureFont(flavor, grapheme, chineseDominant) ? [`"${family}"`] : []),
+    ...(usesFeatureFont(grapheme) ? [`"${family}"`] : []),
     ...CANVAS_FONT_FAMILIES.map((name) => `"${name}"`),
   ].join(', ')
   return `normal ${weight} ${fontSize}px ${families}`
@@ -175,7 +145,7 @@ export async function ensureStickerFontLoaded(
           ranges.some(([start, end]) => code >= start && code <= end),
         )
         if (subset) selected.add(subset.face)
-        else if (usesFeatureFont(flavor, char, true))
+        else if (usesFeatureFont(char))
           throw new Error('Character missing from CDN ranges')
       }
       await withFontLoadTimeout(Promise.all([...selected].map((face) => face.load())))
@@ -201,23 +171,24 @@ export async function ensureStickerFontLoaded(
       remoteFontDisabled.add(flavor)
     }
   }
+  if (!fonts || typeof FontFace === 'undefined') return
+
   let promise = fontLoadPromises.get(flavor)
   if (!promise) {
     const descriptor = FONT_REGISTRY[flavor]
     const family = descriptor.localFamily
     const spec = `normal ${descriptor.weight} 16px "${family}"`
 
-    promise = loadFontFace({
+    const face = new FontFace(
       family,
-      source: `url(${import.meta.env?.BASE_URL ?? ''}${descriptor.file})`,
-      style: 'normal',
-      weight: descriptor.weight,
-      verify: {
-        spec,
-        text: FONT_SAMPLE_TEXT,
-      },
-    })
-      .then(() => undefined)
+      `url(${import.meta.env?.BASE_URL ?? ''}${descriptor.file})`,
+      { style: 'normal', weight: descriptor.weight },
+    )
+    promise = face.load()
+      .then(async (loaded) => {
+        fonts.add(loaded)
+        await fonts.load(spec, FONT_SAMPLE_TEXT)
+      })
       .catch((error: unknown) => {
         fontLoadPromises.delete(flavor)
         throw error
@@ -232,12 +203,11 @@ export function measureGlyphWithCanvas(
   grapheme: string,
   fontSize: number,
   flavor: StickerFlavor,
-  chineseDominant = false,
 ): GlyphMeasurement {
   const canvas = measurementCanvas ?? createRuntimeCanvas(1, 1)
   measurementCanvas = canvas
   const context = getContext(canvas)
-  context.font = fontSpec(flavor, fontSize, grapheme, chineseDominant)
+  context.font = fontSpec(flavor, fontSize, grapheme)
   context.textBaseline = 'alphabetic'
 
   const metrics = context.measureText(grapheme)
