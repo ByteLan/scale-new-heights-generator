@@ -39,7 +39,6 @@
     "build:package": "tsdown",
     "lint": "oxlint .",
     "format": "oxlint --fix .",
-    "format:check": "oxlint .",
     "preview": "vite preview",
     "test": "vitest run",
     "benchmark": "pnpm run build:package && node scripts/benchmark-generation.mjs",
@@ -49,8 +48,7 @@
   },
   "dependencies": {
     "culori": "^4.0.2",
-    "hdrify": "^0.12.1",
-    "inter-ui": "^4.1.1"
+    "hdrify": "^0.12.1"
   },
   "optionalDependencies": {
     "@napi-rs/canvas": "^1.0.2"

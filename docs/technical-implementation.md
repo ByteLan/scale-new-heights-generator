@@ -76,7 +76,6 @@ node scripts/calibrate-byte-style.mjs # 测量数据改变后重新生成系数
 | ---------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------- |
 | 抖音美好体 | [字节字体 CSS](https://fonts.bytedance.com/dfd/api/v1/css?family=DOUYINSANSBOLD-GB&display=swap) | `public/DouyinSansBold.woff2`                |
 | 优设标题黑 | [在线分片 CSS](https://cn-font.claude-code-best.win/packages/ysbth/dist/优设标题黑/result.css)   | `public/YouSheBiaoTiHei.ttf`                 |
-| Inter      | [官方 CSS](https://rsms.me/inter/inter.css)                                                      | `inter-ui/web-latin/Inter-Bold-subset.woff2` |
 
 [`fontStylesheet.ts`](../src/sticker/worker/fontStylesheet.ts) 保留 CDN CSS 供网页直接使用，并用原生 CSSOM 读取同一份 `@font-face` 声明，解析相对 URL，再把字体来源传给 Worker。CSS 请求按 URL 共享 Promise；页面与 Worker 各自注册字体，字体文件请求可复用浏览器缓存。预设菜单直接使用 CDN 原始字体族，打开时用原生字体 API 加载预设文字；失败才加载本地整库，不增加菜单等待状态或字面高度测量。
 
@@ -84,9 +83,9 @@ Worker 按当前文字选择 `unicode-range` 分片。重叠区间遵循后声�
 
 Worker 的 Canvas 可能保留同名字体的旧分片匹配结果，导致切换预设后新字符使用系统字体。每次新增已加载分片时，使用带 `Render` 标识和分片数量的内部字体族名，并按 CSS 声明顺序重新注册已加载分片，让测量与绘制重新匹配。没有新增分片时保持族名与注册结果，族名数量受分片总数限制。这不更改字体文件，也不影响预设菜单的 CDN 字体名。浏览器本地回退使用 `DouyinSans-Local`、`YouSheBiaoTiHei-Local`，与 CDN 字体族区分。
 
-Node 始终从本地注册字体，不读取 CDN。Inter 本地子集来自已有 `inter-ui` 依赖，不在 `public` 中复制文件；没有增加新的静态字库或参考图片。
+Node 始终从本地注册字体，不读取 CDN。页面 UI 通过 `index.html` 引入 Inter 官方 CDN CSS。高像素密度屏幕使用 `InterVariable, sans-serif`，由浏览器的 sans-serif 配置提供回退；低像素密度屏幕（≤ 1.25dppx）使用 `InterVariable, system-ui, sans-serif`。两条回退链保持独立，高密度屏幕不插入 system-ui。Inter 启用开放数字（ss01）、易辨字形（ss02，含零）和圆形引号与逗号（ss03），通过限定 `InterVariable` 的 `@font-feature-values` 应用。Inter 仅用于网页显示，不参与贴纸渲染，也不安装 `inter-ui` 包。
 
-字体选择按 grapheme 执行：优设标题黑承载中英文数字；抖音美好体在中文占多数时承载少量英文数字，其余西文交给 Inter。Emoji 与符号使用运行环境提供的字体。不同操作系统的 Emoji 与字体栅格化可能产生差异。
+字体选择按 grapheme 执行：两种样式的中英文与数字均使用各自的特色字体，不按中文占比切换字体。Emoji 与符号使用运行环境提供的字体。不同操作系统的 Emoji 与字体栅格化可能产生差异。
 
 ## 尺寸、内存与任务调度
 
@@ -170,12 +169,11 @@ await renderStickerToBuffer("高峰不常有", {
   fontFiles: {
     snh: "/opt/fonts/DouyinSansBold.woff2",
     bs: "/opt/fonts/YouSheBiaoTiHei.ttf",
-    inter: "/opt/fonts/Inter-Bold-subset.woff2",
   },
 });
 ```
 
-Inter Latin Bold 默认从 `inter-ui/web-latin/Inter-Bold-subset.woff2` 解析，注册为独立字体族 `Inter Latin Bold`；缺失时会退回系统 sans-serif。Emoji / Symbol fallback 字体会按运行环境可用性注册：macOS 优先 Apple Color Emoji / Apple Symbols，Windows 走 Segoe UI Emoji / Segoe UI Symbol，Linux 或容器环境可使用系统安装或显式传入的 Noto 字体。
+Emoji / Symbol fallback 字体会按运行环境可用性注册：macOS 优先 Apple Color Emoji / Apple Symbols，Windows 走 Segoe UI Emoji / Segoe UI Symbol，Linux 或容器环境可使用系统安装或显式传入的 Noto 字体。
 
 根入口只导出配置、预设、URL 编解码和配色工具等纯逻辑：
 
@@ -194,6 +192,8 @@ import {
   setCanvasRuntime,
 } from "@syru/byted-sticker-generator/core";
 ```
+
+渲染结果的 `canvas` 可直接用于后续处理，浏览器也可通过 `toBlob()` 导出 PNG，或用 `createImageBitmap(result.canvas)` 获取不清空画布的快照。Node 使用 `renderStickerToImage()` 等字节流接口。
 
 飞书头像使用独立入口，不依赖 sticker 的字形/描边管线：
 
@@ -214,7 +214,6 @@ const png = await renderAvatarToBuffer({
 ## 验证与体积审计
 
 ```bash
-pnpm format:check
 pnpm lint
 pnpm exec tsc -b
 pnpm test
@@ -223,7 +222,7 @@ pnpm audit:size
 pnpm benchmark
 ```
 
-`pnpm format` 由 Oxlint 执行 Stylistic 基础规则，只统一缩进、引号和空格等格式，保留手工换行，不强制展开对象、数组或调用链。80–120 列作为阅读参考，不作为 CI 门槛；`pnpm format:check` 与 `pnpm lint` 使用同一套规则，CI 只运行一次 lint。Stylistic 仅作为开发依赖，由 Oxlint 加载，无需安装独立的 ESLint 引擎。生成的校准配置仍由校准脚本验证。
+`pnpm format` 由 Oxlint 执行 Stylistic 基础规则，只统一缩进、引号和空格等格式，保留手工换行，不强制展开对象、数组或调用链。80–120 列作为阅读参考，不作为 CI 门槛。`oxlint --fix` 会应用全部可修复规则，不限于 Stylistic。Stylistic 仅作为开发依赖，由 Oxlint 加载，无需安装独立的 ESLint 引擎。生成的校准配置仍由校准脚本验证。
 
 `audit:size` 在内存中构建，列出实际产物原始 / gzip 体积、公共资源和依赖贡献。依赖贡献采用最终压缩前的模块长度，只用于定位大头，不能直接相加当作下载体积。两个 Worker 分别构建 HDR 延迟模块，只有使用相应工具的 HDR 功能时才请求对应文件。
 

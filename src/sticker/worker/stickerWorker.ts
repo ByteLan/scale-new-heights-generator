@@ -1,6 +1,6 @@
 import type { StickerControls } from '../config/defaults'
 import { loadIconBitmap } from '../utils/iconLoader'
-import { loadInterFontSources, loadStickerFontSources } from './fontStylesheet'
+import { loadStickerFontSources } from './fontStylesheet'
 import {
   createImageWorkerClient,
   type ImageWorkerResults,
@@ -23,18 +23,17 @@ function requestStickerImage<K extends keyof ImageWorkerResults>(
   type: K,
 ) {
   return client.request(type, async (worker, id, signal) => {
-    const [icon, fonts, interFonts] = await Promise.all([
+    const [icon, fonts] = await Promise.all([
       // duotone 图标注入贴纸主色，其余图标忽略该参数。
       loadIconBitmap(controls.icon, controls.envelope.colors[0] ?? '#ffffff'),
       loadStickerFontSources(controls.flavor),
-      loadInterFontSources(),
     ])
     if (signal.aborted) {
       icon?.bitmap.close()
       return
     }
     worker.postMessage(
-      { type, id, controls, icon, fonts, interFont: interFonts?.[0] },
+      { type, id, controls, icon, fonts },
       { transfer: icon ? [icon.bitmap] : [] },
     )
   })

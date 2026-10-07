@@ -104,16 +104,15 @@
   overflow: hidden;
 }
 
+.sticker-text-input {
+  font-size: 1.25rem;
+}
+
 .field {
   display: grid;
   grid-template-columns: 4.5rem minmax(0, 1fr) max-content;
   align-items: center;
   gap: 0.5rem;
-}
-
-.field-label-wrapper {
-  display: inline-flex;
-  user-select: none;
 }
 
 .field-label {
@@ -717,13 +716,6 @@
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-}
-
-.knob-label {
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 @media (max-width: 20rem) {

@@ -1,6 +1,5 @@
 import { splitGraphemes } from '../../shared/render/input'
 import type { StickerFlavor } from '../config/defaults'
-import { isChineseDominant } from './font'
 import { isCjkGrapheme, isWesternWordGrapheme, isWordSymbolGrapheme } from './characters'
 import {
   IDENTITY_GLYPH_TRANSFORM,
@@ -122,7 +121,6 @@ export function createStickerLayout(
     letterSpacing: options.letterSpacing,
     fontSize: options.fontSize,
     flavor: options.flavor ?? 'snh',
-    chineseDominant: isChineseDominant(text),
     glyphTransform,
   }
 }

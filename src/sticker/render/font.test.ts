@@ -118,19 +118,4 @@ describe('browser font sources', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('keeps the Inter fallback when the timed-out remote font finishes late', async () => {
-    let finishRemote!: () => void
-    const remoteWait = new Promise<void>((resolve) => { finishRemote = resolve })
-    const { fonts, instances, sources } = await fixture(remoteWait)
-    const { ensureInterFontLoaded } = await import('../worker/interFont')
-    vi.useFakeTimers()
-    const loading = ensureInterFontLoaded(sources[0])
-    await vi.advanceTimersByTimeAsync(FONT_CDN_TIMEOUT_MS)
-    await loading
-    expect(instances[1].source).toContain('Inter-Bold-subset')
-    finishRemote()
-    await vi.runAllTimersAsync()
-    expect(fonts.add).toHaveBeenCalledTimes(1)
-    expect(fonts.add).toHaveBeenCalledWith(instances[1])
-  })
 })

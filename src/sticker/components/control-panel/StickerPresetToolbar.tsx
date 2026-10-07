@@ -15,23 +15,12 @@ import {
   type StickerPreset,
 } from '../../config/presets'
 import { colorInputValue } from '../../utils/color'
-import { ensureStickerFontLoaded, stickerFontDescriptor } from '../../render/font'
-import { withFontLoadTimeout } from '../../render/fontFace'
-import { loadStickerFontSources, stickerCdnFontFamily } from '../../worker/fontStylesheet'
+import { ensureStickerUiFontLoaded, stickerUiFontFamily } from '../../worker/fontStylesheet'
 
 async function loadPresetFonts(): Promise<void> {
   await Promise.all(STICKER_FLAVORS.map(async (flavor) => {
     const text = STICKER_PRESET_LIST.filter(preset => preset.flavor === flavor).map(preset => preset.text).join('')
-    const sources = await loadStickerFontSources(flavor)
-    if (sources) {
-      try {
-        await withFontLoadTimeout(document.fonts.load(`bold 16px "${stickerCdnFontFamily(flavor)}"`, text))
-        if (document.fonts.check(`bold 16px "${stickerCdnFontFamily(flavor)}"`, text)) return
-      } catch {
-        // CDN 字体失败或超时后才加载本地整库，不重复注册远程字体。
-      }
-    }
-    await ensureStickerFontLoaded(flavor, text)
+    await ensureStickerUiFontLoaded(flavor, text)
   }))
 }
 
@@ -189,7 +178,7 @@ function PresetOption({
       <span
         className={`preset-option-text preset-option-text-${preset.flavor}`}
         style={{
-          fontFamily: `"${stickerCdnFontFamily(preset.flavor)}", "${stickerFontDescriptor(preset.flavor).localFamily}", sans-serif`,
+          fontFamily: stickerUiFontFamily(preset.flavor),
         }}
       >{preset.text}</span>
     </span>

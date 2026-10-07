@@ -53,8 +53,6 @@ export interface StickerLayout {
   letterSpacing: number
   fontSize: number
   flavor: StickerFlavor
-  /** 整段是否以中文为主，决定 snh 下西文数字是否随特色字体排版 */
-  chineseDominant: boolean
   /** 绘制时应用于文字字形的每字体整形参数 */
   glyphTransform: GlyphTransform
 }

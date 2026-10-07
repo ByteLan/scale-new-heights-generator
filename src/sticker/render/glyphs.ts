@@ -27,14 +27,13 @@ function renderGlyphTile(
   fontSize: number,
   lineWidth: number,
   flavor: StickerFlavor,
-  chineseDominant: boolean,
   glyphTransform: GlyphTransform,
   applySkew: boolean,
 ): GlyphTile {
   // Measure glyph bounding box (un-transformed)
   const tempCanvas = createRuntimeCanvas(1, 1)
   const tempCtx = getContext(tempCanvas)
-  tempCtx.font = fontSpec(flavor, fontSize, grapheme, chineseDominant)
+  tempCtx.font = fontSpec(flavor, fontSize, grapheme)
   tempCtx.textBaseline = 'alphabetic'
   const metrics = tempCtx.measureText(grapheme)
   const left = metrics.actualBoundingBoxLeft || 0
@@ -42,8 +41,8 @@ function renderGlyphTile(
   const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.82
   const descent = metrics.actualBoundingBoxDescent || fontSize * 0.18
 
-  // 西文 fallback 保留垂直倾斜，水平斜切仅作用于特色字体。
-  const horizontalSkew = applySkew && usesFeatureFont(flavor, grapheme, chineseDominant)
+  // 回退字形保留垂直倾斜，水平斜切仅作用于特色字体。
+  const horizontalSkew = applySkew && usesFeatureFont(grapheme)
 
   // Four corners of glyph bbox relative to anchor (0, 0 = baseline left)
   const corners = [
@@ -79,7 +78,7 @@ function renderGlyphTile(
 
   if (applySkew) applyGlyphTransform(ctx, glyphTransform, horizontalSkew)
 
-  ctx.font = fontSpec(flavor, fontSize, grapheme, chineseDominant)
+  ctx.font = fontSpec(flavor, fontSize, grapheme)
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#ffffff'
@@ -113,7 +112,7 @@ export function buildGlyphTileCache(
 ): { strokeTiles: Map<string, GlyphTile>; fillTiles: Map<string, GlyphTile> } {
   const strokeTiles = new Map<string, GlyphTile>()
   const fillTiles = new Map<string, GlyphTile>()
-  const { fontSize, flavor, chineseDominant, glyphTransform } = layout
+  const { fontSize, flavor, glyphTransform } = layout
 
   for (const placement of layout.placements) {
     const { grapheme, skew } = placement
@@ -123,20 +122,13 @@ export function buildGlyphTileCache(
       if (!strokeTiles.has(grapheme)) {
         strokeTiles.set(
           grapheme,
-          renderEmojiStrokeTile(
-            grapheme,
-            fontSize,
-            strokeLineWidth,
-            flavor,
-            chineseDominant,
-            layout,
-          ),
+          renderEmojiStrokeTile(grapheme, strokeLineWidth, layout),
         )
       }
       if (!fillTiles.has(grapheme)) {
         fillTiles.set(
           grapheme,
-          renderEmojiFillTile(grapheme, fontSize, flavor, chineseDominant, layout),
+          renderEmojiFillTile(grapheme, layout),
         )
       }
     } else {
@@ -149,7 +141,6 @@ export function buildGlyphTileCache(
             fontSize,
             strokeLineWidth,
             flavor,
-            chineseDominant,
             glyphTransform,
             skew,
           ),
@@ -158,7 +149,7 @@ export function buildGlyphTileCache(
       if (!fillTiles.has(grapheme)) {
         fillTiles.set(
           grapheme,
-          renderGlyphTile(grapheme, fontSize, 0, flavor, chineseDominant, glyphTransform, skew),
+          renderGlyphTile(grapheme, fontSize, 0, flavor, glyphTransform, skew),
         )
       }
     }
@@ -170,13 +161,8 @@ export function buildGlyphTileCache(
 /**
  * Render an emoji glyph as a white fill tile (no dilation).
  */
-function renderEmojiFillTile(
-  grapheme: string,
-  fontSize: number,
-  flavor: StickerFlavor,
-  chineseDominant: boolean,
-  layout: StickerLayout,
-): GlyphTile {
+function renderEmojiFillTile(grapheme: string, layout: StickerLayout): GlyphTile {
+  const { fontSize, flavor } = layout
   const placement = layout.placements.find((p) => p.grapheme === grapheme)!
   const bounds = placement.bounds
   const padding = 4
@@ -185,7 +171,7 @@ function renderEmojiFillTile(
 
   const canvas = createRuntimeCanvas(tileWidth, tileHeight)
   const ctx = getContext(canvas)
-  ctx.font = fontSpec(flavor, fontSize, grapheme, chineseDominant)
+  ctx.font = fontSpec(flavor, fontSize, grapheme)
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#ffffff'
@@ -215,12 +201,10 @@ function renderEmojiFillTile(
  */
 function renderEmojiStrokeTile(
   grapheme: string,
-  fontSize: number,
   strokeLineWidth: number,
-  flavor: StickerFlavor,
-  chineseDominant: boolean,
   layout: StickerLayout,
 ): GlyphTile {
+  const { fontSize, flavor } = layout
   const placement = layout.placements.find((p) => p.grapheme === grapheme)!
   const bounds = placement.bounds
   const dilateRadius = Math.ceil(strokeLineWidth / 2)
@@ -230,7 +214,7 @@ function renderEmojiStrokeTile(
 
   const canvas = createRuntimeCanvas(tileWidth, tileHeight)
   const ctx = getContext(canvas)
-  ctx.font = fontSpec(flavor, fontSize, grapheme, chineseDominant)
+  ctx.font = fontSpec(flavor, fontSize, grapheme)
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#ffffff'
@@ -299,26 +283,6 @@ export function drawGlyphsFromTiles(
   }
 }
 
-function resetAndPrepareTextContext(
-  context: OffscreenCanvasRenderingContext2D,
-  fontSize: number,
-  flavor: StickerFlavor,
-): void {
-  context.setTransform(1, 0, 0, 1, 0, 0)
-  context.clearRect(0, 0, context.canvas.width, context.canvas.height)
-  configureTextContext(context, fontSize, flavor)
-}
-
-export function configureTextContext(
-  context: OffscreenCanvasRenderingContext2D,
-  fontSize: number,
-  flavor: StickerFlavor,
-): void {
-  context.font = fontSpec(flavor, fontSize)
-  context.textBaseline = 'alphabetic'
-  context.textAlign = 'left'
-}
-
 // 文字字形（非 Emoji）——它们走单色蒙版着色管线。
 export function isTextPlacement(placement: GlyphPlacement): boolean {
   return !isEmojiGrapheme(placement.grapheme)
@@ -327,8 +291,6 @@ export function isTextPlacement(placement: GlyphPlacement): boolean {
 export function drawEmojiGlyphs(
   context: OffscreenCanvasRenderingContext2D,
   layout: StickerLayout,
-  fontSize: number,
-  flavor: StickerFlavor,
   originX: number,
   originY: number,
 ): void {
@@ -338,7 +300,7 @@ export function drawEmojiGlyphs(
   for (const placement of emojiPlacements) {
     // Apple Color Emoji 在右上/左下偶有孤立像素。逐字符隔离绘制后再裁角，
     // 避免一次性绘制全部 emoji 时，某个字符的裁剪矩形擦到相邻字符。
-    drawSingleEmojiGlyph(context, layout, placement, fontSize, flavor, originX, originY)
+    drawSingleEmojiGlyph(context, layout, placement, originX, originY)
   }
 }
 
@@ -359,8 +321,6 @@ function drawSingleEmojiGlyph(
   context: OffscreenCanvasRenderingContext2D,
   layout: StickerLayout,
   placement: GlyphPlacement,
-  fontSize: number,
-  flavor: StickerFlavor,
   originX: number,
   originY: number,
 ): void {
@@ -371,7 +331,8 @@ function drawSingleEmojiGlyph(
   const emojiCanvas = createRuntimeCanvas(right - left, bottom - top)
   const emojiContext = getContext(emojiCanvas)
 
-  resetAndPrepareTextContext(emojiContext, fontSize, flavor)
+  emojiContext.textBaseline = 'alphabetic'
+  emojiContext.textAlign = 'left'
   drawPlacedGlyphs(
     emojiContext,
     { ...layout, placements: [placement] },
@@ -400,7 +361,6 @@ export function drawPlacedGlyphs(
       layout.flavor,
       layout.fontSize,
       placement.grapheme,
-      layout.chineseDominant,
     )
     // 锚定在字形的基线左端；下面每一步整形都以此为中心。
     context.translate(originX + placement.x, originY + placement.baselineY)
@@ -408,7 +368,7 @@ export function drawPlacedGlyphs(
       applyGlyphTransform(
         context,
         layout.glyphTransform,
-        usesFeatureFont(layout.flavor, placement.grapheme, layout.chineseDominant),
+        usesFeatureFont(placement.grapheme),
       )
     }
     painter(context, placement.grapheme)

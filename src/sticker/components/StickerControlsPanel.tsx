@@ -5,6 +5,7 @@ import { StickerAdvancedControls } from './control-panel/StickerAdvancedControls
 import { StickerIconField } from './control-panel/StickerIconField'
 import { StickerPresetToolbar } from './control-panel/StickerPresetToolbar'
 import { StickerStyleField } from './control-panel/StickerStyleField'
+import { ensureStickerUiFontLoaded, stickerUiFontFamily } from '../worker/fontStylesheet'
 
 type StickerControlsPanelProps = Pick<
   StickerEditor,
@@ -29,9 +30,18 @@ export function StickerControlsPanel({
   useLayoutEffect(() => {
     const textarea = textareaRef.current
     if (!textarea) return
-    textarea.style.height = 'auto'
-    textarea.style.height = `${textarea.scrollHeight}px`
-  }, [controls.text])
+    let active = true
+    const resize = () => {
+      if (!active) return
+      textarea.style.height = 'auto'
+      textarea.style.height = `${textarea.scrollHeight}px`
+    }
+    resize()
+    void ensureStickerUiFontLoaded(controls.flavor, controls.text)
+      .then(resize)
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [controls.text, controls.flavor])
 
   return (
     <section className="panel panel-controls">
@@ -47,7 +57,8 @@ export function StickerControlsPanel({
 
       <Textarea
         ref={textareaRef}
-        className="text-input"
+        className="text-input sticker-text-input"
+        style={{ fontFamily: stickerUiFontFamily(controls.flavor) }}
         value={controls.text}
         placeholder="输入文本，回车换行"
         rows={2}

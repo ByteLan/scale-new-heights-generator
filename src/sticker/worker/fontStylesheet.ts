@@ -1,42 +1,28 @@
 import type { StickerFlavor } from '../config/defaults'
+import { ensureStickerFontLoaded, stickerFontDescriptor } from '../render/font'
 import { withFontLoadTimeout, type FontFaceSource } from '../render/fontFace'
 
 interface FontStylesheet {
   url: string
   family: string
-  retain?: boolean
 }
 
 const FONT_STYLESHEETS: Record<StickerFlavor, FontStylesheet> = {
   snh: {
     url: 'https://fonts.bytedance.com/dfd/api/v1/css?family=DOUYINSANSBOLD-GB&display=swap',
     family: 'DOUYINSANSBOLD-GB',
-    retain: true,
   },
   bs: {
     url: 'https://cn-font.claude-code-best.win/packages/ysbth/dist/优设标题黑/result.css',
     family: 'YouSheBiaoTiHei',
-    retain: true,
   },
 }
 
-const INTER_STYLESHEET: FontStylesheet = { url: 'https://rsms.me/inter/inter.css', family: 'InterVariable', retain: true }
 const stylesheetPromises = new Map<string, Promise<FontFaceSource[] | undefined>>()
-
-export function loadInterFontSources(): Promise<FontFaceSource[] | undefined> {
-  return loadStylesheet(INTER_STYLESHEET)
-}
 
 /** 页面保留 CDN CSS；用 CSSOM 读取同一份来源，供 Worker 独立注册字体。 */
 export function loadStickerFontSources(flavor: StickerFlavor): Promise<FontFaceSource[] | undefined> {
-  return loadStylesheet(FONT_STYLESHEETS[flavor])
-}
-
-export function stickerCdnFontFamily(flavor: StickerFlavor): string {
-  return FONT_STYLESHEETS[flavor].family
-}
-
-function loadStylesheet(stylesheet: FontStylesheet): Promise<FontFaceSource[] | undefined> {
+  const stylesheet = FONT_STYLESHEETS[flavor]
   let promise = stylesheetPromises.get(stylesheet.url)
   if (!promise) {
     promise = readFontStylesheet(stylesheet).catch(() => undefined)
@@ -45,7 +31,26 @@ function loadStylesheet(stylesheet: FontStylesheet): Promise<FontFaceSource[] | 
   return promise
 }
 
-async function readFontStylesheet({ url, family, retain = false }: FontStylesheet): Promise<FontFaceSource[]> {
+/** 编辑区和预设菜单优先使用 CDN 字体，本地整库作为回退。 */
+export function stickerUiFontFamily(flavor: StickerFlavor): string {
+  return `"${FONT_STYLESHEETS[flavor].family}", "${stickerFontDescriptor(flavor).localFamily}", sans-serif`
+}
+
+export async function ensureStickerUiFontLoaded(flavor: StickerFlavor, text: string): Promise<void> {
+  const sources = await loadStickerFontSources(flavor)
+  if (sources) {
+    const spec = `bold 16px "${FONT_STYLESHEETS[flavor].family}"`
+    try {
+      await withFontLoadTimeout(document.fonts.load(spec, text))
+      if (document.fonts.check(spec, text)) return
+    } catch {
+      // CDN 字体失败或超时后才加载本地整库，不重复注册远程字体。
+    }
+  }
+  await ensureStickerFontLoaded(flavor, text)
+}
+
+async function readFontStylesheet({ url, family }: FontStylesheet): Promise<FontFaceSource[]> {
   const link = document.createElement('link')
   link.rel = 'stylesheet'
   link.crossOrigin = 'anonymous'
@@ -71,6 +76,6 @@ async function readFontStylesheet({ url, family, retain = false }: FontStyleshee
     if (!faces.length) throw new Error('No matching font faces in stylesheet')
     return faces
   } finally {
-    if (!retain || !link.sheet) link.remove()
+    if (!link.sheet) link.remove()
   }
 }
