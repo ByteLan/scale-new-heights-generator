@@ -83,7 +83,7 @@ Worker 按当前文字选择 `unicode-range` 分片。重叠区间遵循后声�
 
 Worker 的 Canvas 可能保留同名字体的旧分片匹配结果，导致切换预设后新字符使用系统字体。每次新增已加载分片时，使用带 `Render` 标识和分片数量的内部字体族名，并按 CSS 声明顺序重新注册已加载分片，让测量与绘制重新匹配。没有新增分片时保持族名与注册结果，族名数量受分片总数限制。这不更改字体文件，也不影响预设菜单的 CDN 字体名。浏览器本地回退使用 `DouyinSans-Local`、`YouSheBiaoTiHei-Local`，与 CDN 字体族区分。
 
-Node 始终从本地注册字体，不读取 CDN。页面 UI 在所有像素密度下统一通过 `index.html` 引入 Inter 官方 CDN CSS，失败时回退系统字体。Inter 启用开放数字（ss01）、易辨字形（ss02，含零）和圆形引号与逗号（ss03），通过限定 `InterVariable` 的 `@font-feature-values` 应用。Inter 仅用于网页显示，不参与贴纸渲染，也不安装 `inter-ui` 包。
+Node 始终从本地注册字体，不读取 CDN。页面 UI 通过 `index.html` 引入 Inter 官方 CDN CSS。高像素密度屏幕使用 `InterVariable, sans-serif`，由浏览器的 sans-serif 配置提供回退；低像素密度屏幕（≤ 1.25dppx）使用 `InterVariable, system-ui, sans-serif`。两条回退链保持独立，高密度屏幕不插入 system-ui。Inter 启用开放数字（ss01）、易辨字形（ss02，含零）和圆形引号与逗号（ss03），通过限定 `InterVariable` 的 `@font-feature-values` 应用。Inter 仅用于网页显示，不参与贴纸渲染，也不安装 `inter-ui` 包。
 
 字体选择按 grapheme 执行：两种样式的中英文与数字均使用各自的特色字体，不按中文占比切换字体。Emoji 与符号使用运行环境提供的字体。不同操作系统的 Emoji 与字体栅格化可能产生差异。
 
