@@ -27,7 +27,7 @@ const FONT_REGISTRY: Record<StickerFlavor, StickerFontDescriptor> = {
   snh: {
     family: 'DouyinSansBold',
     localFamily: 'DouyinSans-Local',
-    weight: 'bold',
+    weight: 'normal',
     file: 'DouyinSansBold.woff2',
     // >>> 勇攀高峰 (抖音美好体) 手动精调区：如需垂直方向挤压等，改这里 <<<
     // scale=[水平, 垂直]；skewDeg=[水平斜切, 垂直斜切]（度）。
@@ -41,7 +41,7 @@ const FONT_REGISTRY: Record<StickerFlavor, StickerFontDescriptor> = {
   bs: {
     family: 'YouSheBiaoTiHei',
     localFamily: 'YouSheBiaoTiHei-Local',
-    weight: 'bold',
+    weight: 'normal',
     file: 'YouSheBiaoTiHei.ttf',
     // >>> 字节范 (优设标题黑) 手动精调区：垂直拉高 + 固有水平斜切 <<<
     // scale=[水平, 垂直]；skewDeg=[水平斜切, 垂直斜切]（度）。

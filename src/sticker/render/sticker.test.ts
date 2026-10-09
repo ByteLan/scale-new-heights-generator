@@ -41,7 +41,7 @@ describe('sticker font selection', () => {
   it.each(['snh', 'bs'] as const)('uses the %s feature font for Chinese, Latin and digits without surrounding text', (flavor) => {
     const { family } = stickerFontDescriptor(flavor)
     for (const grapheme of ['高', '〇', 'A', '1']) {
-      expect(fontSpec(flavor, 128, grapheme)).toMatch(`bold 128px "${family}",`)
+      expect(fontSpec(flavor, 128, grapheme)).toMatch(`normal 128px "${family}",`)
     }
     expect(fontSpec(flavor, 128, '🙂')).not.toContain(`"${family}"`)
   })
